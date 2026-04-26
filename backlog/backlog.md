@@ -6,7 +6,6 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-k7p] Set up Rust project scaffolding
 - [vat-q3m] Crockford base32 utilities
 - [vat-h8x] Project config loader (`backlog/vat.toml`)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`)
