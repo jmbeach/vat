@@ -135,6 +135,27 @@ name = "jared"
 - Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml`.
 - `user.name` is optional in the file; commands that require it (`vat start`) error with a pointer to `vat config set user.name <name>` if missing.
 
+## ID alphabet & generation
+
+A small shared primitive (likely `src/base32.rs`) backs every place an ID or prefix is validated, parsed, or generated.
+
+**Alphabet.** `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (32 chars, Crockford — no `I`, `L`, `O`, `U`). Inputs are accepted in either case; everything VAT writes is lowercase.
+
+**Strict input.** Validation rejects any character outside the canonical alphabet, including the ambiguous `I`/`L`/`O`/`U`. We do not silently fold `I/L → 1` or `O → 0` per Crockford's decoder hint — the project prefix and suffix are short, user-typed identifiers and a typo should be a hard error pointing at the bad character, not a quiet rewrite.
+
+**Module surface.** Two `pub(crate)` operations:
+
+- `validate(s, expected_len) -> Result<(), Base32Error>` — checks length and per-character membership in the alphabet (case-insensitive). The `expected_len` is passed by callers (`3` for both prefix and suffix today) so the magic number stays visible at call sites and tests can hit the `WrongLength` path directly.
+- `random(n, &mut impl RngCore) -> String` — generates `n` lowercase Crockford base32 characters from a caller-supplied RNG. Always lowercase. Returns an owned `String` — the allocation is negligible against the 100-retry collision loop in `vat sync`. RNG is injected so tests can pass a seeded RNG and assert exact output; production callers pass `rand::thread_rng()`.
+
+**Error type.** `Base32Error` is a `thiserror`-derived enum with `WrongLength { expected, got }` and `InvalidChar { ch, pos }` variants. `pos` is a 0-based char index (not byte index) so it aligns with printed glyph positions even if the input contains non-ASCII characters; the renderer can `+1` if it wants a 1-based "column N" message. Variants exist so callers (`vat init`, `vat config set project.id`) can match on `InvalidChar` to render a caret under the bad character. The project-wide error-handling pattern is documented in [cli.md](./cli.md#error-handling).
+
+**No decoding to bytes.** VAT never decodes Crockford base32 to bytes — IDs are opaque tokens, not encoded numbers. The module exposes alphabet membership and random-character generation only.
+
+**Dependencies.** Hand-rolled alphabet table (~15 lines). New crate dependencies: `rand` (RNG), `thiserror` (error derive). `anyhow` will be added when `main` wires up top-level error handling, but isn't needed by this module directly.
+
+**Where collision-handling lives.** The 100-retry loop on suffix collisions is owned by `vat sync` (see [sync LLD](./sync.md)), not by this module. `random` is dumb — it generates and returns; the caller decides whether the result collides with `.used-ids`.
+
 ## Decisions & alternatives
 
 - **First `---` after the frontmatter as the parsed/freeform boundary.** Simpler than a magic comment. Markdown-native. The frontmatter (if present) consumes its own pair of `---` delimiters first, then the next `---` line in the file is the body's boundary. Cost: someone using `---` for a section break inside the parsed region truncates their backlog. Documented as a known restriction.
@@ -143,3 +164,6 @@ name = "jared"
 - **Markers front-loaded, fixed order.** Easier parsing (can detect markers before reaching the title) and easier visual scanning. Free-form marker placement was rejected for parser complexity.
 - **Notes go in a separate file rather than staying inline.** Keeps `backlog.md` scannable as a flat list. Cost: two files to look at for a task with notes; mitigated by `[id]` being the obvious lookup key.
 - **Tombstone file rather than git-history scan.** Cheap, explicit, decoupled from git internals. Cost: a second source of truth that can drift if hand-edited; accepted because writers are limited and the file is append-only.
+- **Strict Crockford input (no `I/L/O` folding).** Crockford's decoder hint says lenient decoders should fold `I/L → 1` and `O → 0`. We don't, because the inputs here are short user-typed identifiers where a typo is more likely than intentional use of an ambiguous glyph; a hard error is more helpful than a silent rewrite. Cost: a user who types `Iol` for their prefix gets an error instead of `101`.
+- **Hand-rolled alphabet, no `crockford` crate.** The surface is two functions over a 32-char table; pulling a crate would dwarf the implementation. Cost: we own ~15 lines of alphabet code.
+- **Injected RNG.** `random` takes `&mut impl RngCore` rather than calling `thread_rng()` internally, so collision-retry tests in `vat sync` can drive deterministic sequences. Cost: every caller threads an RNG through; in practice only `vat sync` calls it.
