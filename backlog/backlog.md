@@ -35,6 +35,9 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-h2y] Project README at repo root
 - [vat-j5z] [blocked-by:vat-g4w] Release packaging
 - [vat-k1b] [blocked-by:vat-q2e] Shell completions
+- Switch test runner to `cargo-nextest`
+  Faster, cleaner output, parallelized by default. Update DoD checks in any
+  in-flight plans (currently base32 plan references `cargo test`) once switched.
 
 ---
 

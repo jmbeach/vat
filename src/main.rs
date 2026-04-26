@@ -1,3 +1,5 @@
+mod base32;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
