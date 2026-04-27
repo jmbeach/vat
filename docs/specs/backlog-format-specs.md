@@ -27,6 +27,18 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **FMT-PARSE-004** — The system shall treat any content in the parsed region appearing before the first bullet line as preamble.
 - [ ] **FMT-PARSE-005** — When writing `backlog.md`, the system shall emit the preamble verbatim at the top of the parsed region.
 
+## Crockford base32 utility
+
+These requirements govern the shared `base32` module used wherever IDs or prefixes are validated or generated. See [LLD § ID alphabet & generation](../llds/backlog-format.md#id-alphabet--generation).
+
+- [x] **FMT-B32-001** — The system shall recognize the Crockford base32 alphabet as the 32 characters `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (case-insensitive on input).
+- [x] **FMT-B32-002** — When validating a string against the Crockford base32 alphabet, the system shall accept characters in either case.
+- [x] **FMT-B32-003** — When validating a string whose length differs from the expected length, the system shall return an error identifying the expected and actual lengths, and shall not check character membership.
+- [x] **FMT-B32-004** — When validating a string whose length matches the expected length and which contains a character outside the Crockford base32 alphabet, the system shall return an error identifying the offending character and its 0-based char index within the string.
+- [x] **FMT-B32-005** — The system shall reject the characters `I`, `L`, `O`, and `U` (in either case) as invalid Crockford base32 characters, without folding them to `1` or `0`.
+- [x] **FMT-B32-006** — When generating a random Crockford base32 string of length `n`, the system shall emit `n` characters drawn uniformly from the canonical alphabet, all in lowercase.
+- [x] **FMT-B32-007** — When generating a random Crockford base32 string, the system shall draw all randomness from a caller-supplied random number generator.
+
 ## Bullet line markers
 
 - [ ] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.

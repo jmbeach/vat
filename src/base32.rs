@@ -1,0 +1,130 @@
+// @spec FMT-B32-001, FMT-B32-002, FMT-B32-003, FMT-B32-004, FMT-B32-005, FMT-B32-006, FMT-B32-007
+
+#![allow(dead_code)]
+
+use rand::Rng;
+use thiserror::Error;
+
+const ALPHABET: &[u8; 32] = b"0123456789abcdefghjkmnpqrstvwxyz";
+
+#[derive(Debug, Error, PartialEq)]
+pub(crate) enum Base32Error {
+    #[error("wrong length: expected {expected}, got {got}")]
+    WrongLength { expected: usize, got: usize },
+    #[error("invalid character {ch:?} at position {pos}")]
+    InvalidChar { ch: char, pos: usize },
+}
+
+// @spec FMT-B32-001, FMT-B32-002, FMT-B32-003, FMT-B32-004, FMT-B32-005
+pub(crate) fn validate(s: &str, expected_len: usize) -> Result<(), Base32Error> {
+    let got = s.chars().count();
+    if got != expected_len {
+        return Err(Base32Error::WrongLength {
+            expected: expected_len,
+            got,
+        });
+    }
+    for (pos, ch) in s.chars().enumerate() {
+        let lower = ch.to_ascii_lowercase();
+        let in_alphabet = lower.is_ascii() && ALPHABET.contains(&(lower as u8));
+        if !in_alphabet {
+            return Err(Base32Error::InvalidChar { ch, pos });
+        }
+    }
+    Ok(())
+}
+
+// @spec FMT-B32-006, FMT-B32-007
+pub(crate) fn random(n: usize, rng: &mut impl rand::RngCore) -> String {
+    (0..n)
+        .map(|_| {
+            let idx: u8 = rng.gen_range(0..32_u8);
+            ALPHABET[idx as usize] as char
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Base32Error, random, validate};
+
+    // @spec FMT-B32-002
+    #[test]
+    fn validate_accepts_mixed_case() {
+        let mixed = "0123456789AbCdEfGhJkMnPqRsTvWxYz";
+        assert_eq!(validate(mixed, 32), Ok(()));
+    }
+
+    // @spec FMT-B32-001
+    #[test]
+    fn validate_accepts_every_alphabet_character() {
+        let upper = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+        assert_eq!(validate(upper, 32), Ok(()));
+        let lower = "0123456789abcdefghjkmnpqrstvwxyz";
+        assert_eq!(validate(lower, 32), Ok(()));
+    }
+
+    // @spec FMT-B32-005
+    #[test]
+    fn validate_rejects_ambiguous_chars_without_folding() {
+        for ch in ['I', 'i', 'L', 'l', 'O', 'o', 'U', 'u'] {
+            let s = format!("{ch}0000000");
+            let result = validate(&s, 8);
+            assert_eq!(
+                result,
+                Err(Base32Error::InvalidChar { ch, pos: 0 }),
+                "expected InvalidChar for {ch:?}"
+            );
+        }
+    }
+
+    // @spec FMT-B32-004
+    #[test]
+    fn validate_reports_zero_based_char_index_for_invalid_char() {
+        let s = "a\u{1F600}b";
+        assert_eq!(s.chars().count(), 3);
+        assert_eq!(
+            validate(s, 3),
+            Err(Base32Error::InvalidChar {
+                ch: '\u{1F600}',
+                pos: 1
+            })
+        );
+    }
+
+    // @spec FMT-B32-003
+    #[test]
+    fn validate_returns_wrong_length_before_checking_chars() {
+        let s = "!!@@##$$";
+        assert_eq!(
+            validate(s, 5),
+            Err(Base32Error::WrongLength { expected: 5, got: 8 })
+        );
+    }
+
+    // @spec FMT-B32-007
+    // Hardcoded output is stable within rand 0.8.x (StdRng = ChaCha12, documented portable).
+    // A `rand` minor bump may change seed-stretching; if so, re-record this value.
+    #[test]
+    fn random_with_seeded_rng_is_deterministic() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::from_seed([0u8; 32]);
+        assert_eq!(random(3, &mut rng), "da2");
+    }
+
+    // @spec FMT-B32-006
+    #[test]
+    fn random_output_contains_only_canonical_lowercase_chars() {
+        use rand::SeedableRng;
+        let canonical_lower = "0123456789abcdefghjkmnpqrstvwxyz";
+        let mut rng = rand::rngs::StdRng::from_seed([42u8; 32]);
+        let output = random(100, &mut rng);
+        assert_eq!(output.len(), 100);
+        for ch in output.chars() {
+            assert!(
+                canonical_lower.contains(ch),
+                "character {ch:?} is not in the canonical lowercase alphabet"
+            );
+        }
+    }
+}

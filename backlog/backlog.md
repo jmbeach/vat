@@ -6,7 +6,6 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-k7p] Set up Rust project scaffolding
 - [vat-q3m] Crockford base32 utilities
 - [vat-h8x] Project config loader (`backlog/vat.toml`)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`)
@@ -36,6 +35,9 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-h2y] Project README at repo root
 - [vat-j5z] [blocked-by:vat-g4w] Release packaging
 - [vat-k1b] [blocked-by:vat-q2e] Shell completions
+- Switch test runner to `cargo-nextest`
+  Faster, cleaner output, parallelized by default. Update DoD checks in any
+  in-flight plans (currently base32 plan references `cargo test`) once switched.
 
 ---
 
