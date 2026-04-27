@@ -27,6 +27,12 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **SYNC-NOTES-004** — When extracting notes, `vat sync` shall strip the minimum common leading whitespace across the note lines and trim leading and trailing blank lines.
 - [ ] **SYNC-NOTES-005** — When a bullet's note lines are empty after trimming (only whitespace and blank lines), `vat sync` shall not create or modify any item file but shall still remove those lines from `backlog.md`.
 
+## Item-file pointer suffix
+
+- [ ] **SYNC-PTR-001** — When `vat sync` finishes processing a bullet whose id has a corresponding `backlog/items/<id>.md` file, the system shall ensure the bullet's title ends with the literal suffix ` (see ./items/<id>.md)` (single leading space, path relative to `backlog/`), appending it if not already present.
+- [ ] **SYNC-PTR-002** — When `vat sync` finishes processing a bullet whose id has no corresponding `backlog/items/<id>.md` file, the system shall not add the pointer suffix and shall not remove an existing one.
+- [ ] **SYNC-PTR-003** — When the bullet's title already ends with the canonical ` (see ./items/<id>.md)` suffix and the item file exists, `vat sync` shall leave the suffix unchanged (idempotent).
+
 ## Idempotence and writes
 
 - [ ] **SYNC-WRITE-001** — `vat sync` shall produce byte-identical output when run twice in succession on a file that already has all bullets ID'd, no notes, and canonical marker order.

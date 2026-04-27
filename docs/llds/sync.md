@@ -49,6 +49,12 @@
             (frontmatter is left untouched).
         - In all cases, clear notes_lines on the entry (so the bullet becomes a single
           line in the output, regardless of whether the notes were empty or substantive).
+   d. Item-file pointer suffix:
+        - If items/<id>.md exists (whether pre-existing or just created in step c) and
+          the bullet's title does not already end with " (see ./items/<id>.md)",
+          append that suffix (with a single leading space).
+        - If items/<id>.md does not exist, do not add a suffix and do not strip an
+          existing one. Sync is conservative: it never removes information.
 6. Serialize the elements back into the parsed_region.
    Preamble is emitted verbatim at the top.
    Each task_entry emits exactly one line (the normalized bullet).
@@ -65,6 +71,7 @@ After one successful sync:
 - No entry has notes lines.
 - All markers are in canonical order.
 - All assigned ids are in `.used-ids`.
+- Every entry whose id has a corresponding `items/<id>.md` file ends its title with ` (see ./items/<id>.md)`.
 
 A second run finds nothing to assign, nothing to extract, and nothing to normalize, so it produces a byte-identical file (modulo trailing newline normalization, which sync also normalizes to a single trailing `\n`).
 
@@ -77,6 +84,8 @@ A second run finds nothing to assign, nothing to extract, and nothing to normali
 - **Bullet has an id whose project prefix doesn't match `project.id`**: warn, but pass through. (Allows users to import IDs from another project later if needed; v1 just preserves them.)
 - **Empty bullet** (`-` alone): warn, skip the entry, do not assign an id, do not extract any "notes" that follow it. The line is preserved in place.
 - **Item file exists but no bullet references it**: not touched. (Could be a stale file from a manual delete; sync doesn't garbage-collect.)
+- **Item file exists, bullet has the id, but the `(see ./items/<id>.md)` suffix is missing or hand-edited away**: sync re-appends the canonical suffix.
+- **Item file does not exist but a `(see ./items/<id>.md)` suffix is present** (e.g., the user manually deleted the item file): sync leaves the suffix alone. Sync never strips information.
 - **`backlog.md` does not exist**: hard error pointing at `vat init`.
 - **`backlog/items/` does not exist but a write is needed**: created.
 - **No `---` separator in the file**: entire file is the parsed region; sync does not add one.

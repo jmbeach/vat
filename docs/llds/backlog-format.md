@@ -73,7 +73,7 @@ Only `-` is recognized as a bullet marker; lines starting with `*` or `+` are tr
 - **`[in-progress]`** — literal string, optional.
 - **`[by:<name>]`** — `<name>` is a non-empty string of `[A-Za-z0-9_.-]+`. Optional.
 - **`[blocked-by:<id>]`** — `<id>` matches the project ID format. Optional. Multiple `[blocked-by:...]` markers are not supported in v1; only the first is preserved if a user types more than one.
-- **`<title>`** — the rest of the line, trimmed. Required, non-empty.
+- **`<title>`** — the rest of the line, trimmed. Required, non-empty. When the bullet has a corresponding `backlog/items/<id>.md` file, the title ends with the literal suffix ` (see ./items/<id>.md)` (single space before the open paren, path relative to `backlog/` with an explicit `./` prefix so editors recognize it as a clickable path). The suffix is part of the title — round-tripped verbatim by the parser and managed by `vat sync` (see the [sync LLD](./sync.md)). It is not a marker.
 
 Markers are always front-loaded in the order shown. `vat sync` normalizes order if a user shuffles them by hand. Other commands write markers in canonical position directly.
 
@@ -86,7 +86,7 @@ Markers are always front-loaded in the order shown. `vat sync` normalizes order 
 
 ### Notes
 
-"Notes" are the lines between a bullet and the next bullet (or end of parsed region), excluding any trailing blank lines that immediately precede the next bullet. On `vat sync` notes are extracted and the bullet line is left as a single line in `backlog.md`.
+"Notes" are the lines between a bullet and the next bullet (or end of parsed region), excluding any trailing blank lines that immediately precede the next bullet. On `vat sync` notes are extracted into `backlog/items/<id>.md` and the bullet line is left as a single line in `backlog.md` whose title ends with ` (see ./items/<id>.md)`.
 
 ### Reserved-state rules
 
