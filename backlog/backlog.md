@@ -6,7 +6,6 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-c4d] Claude skill that implements `vat` directly (stopgap until the binary lands) (see ./items/vat-c4d.md)
 - [vat-q3m] Crockford base32 utilities (see ./items/vat-q3m.md)
 - [vat-h8x] Project config loader (`backlog/vat.toml`) (see ./items/vat-h8x.md)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
@@ -42,8 +41,3 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 
 Anything below this line is freeform notes and is not parsed by VAT.
 
-## Open questions to revisit
-
-- Do we want `vat list` / `vat ls` to print a summary of bullets and their states? Pure read-only, no file mutation. Could be useful for agents.
-- Should `vat done` accept multiple IDs (`vat done foo-7k2 foo-9hf`)?
-- Telemetry / first-run nudges — probably none for v1.
