@@ -6,7 +6,6 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-q3m] Crockford base32 utilities (see ./items/vat-q3m.md)
 - [vat-h8x] Project config loader (`backlog/vat.toml`) (see ./items/vat-h8x.md)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
 - [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
@@ -20,7 +19,7 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
 - [vat-q2e] [blocked-by:vat-r6f] `vat init` command (see ./items/vat-q2e.md)
 - [vat-r6f] README template (baked into binary) (see ./items/vat-r6f.md)
-- [vat-s9g] [blocked-by:vat-q3m] `vat sync` command — ID assignment (see ./items/vat-s9g.md)
+- [vat-s9g] `vat sync` command — ID assignment (see ./items/vat-s9g.md)
 - [vat-t1h] [blocked-by:vat-n4c] `vat sync` command — notes extraction (see ./items/vat-t1h.md)
 - [vat-v3k] [blocked-by:vat-j3z] `vat sync` command — marker normalization and write (see ./items/vat-v3k.md)
 - [vat-w5m] [blocked-by:vat-j3z] `vat start <id>` command (see ./items/vat-w5m.md)
