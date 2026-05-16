@@ -6,7 +6,7 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-h8x] Project config loader (`backlog/vat.toml`) (see ./items/vat-h8x.md)
+- [vat-h8x] [in-progress] [by:jared] Project config loader (`backlog/vat.toml`) (see ./items/vat-h8x.md)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
 - [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
 - [vat-d6t] Markdown parser: body region split (see ./items/vat-d6t.md)
