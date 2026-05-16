@@ -8,6 +8,7 @@ clap = { version = "4", features = ["derive"] }
 rand = "0.8"
 serde_yaml = "0.9"
 thiserror = "1"
+toml = "0.8"
 
 [lints.clippy]
 pedantic = "warn"
