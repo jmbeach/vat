@@ -67,9 +67,9 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Project config
 
-- [ ] **FMT-CFG-001** — `backlog/vat.toml` shall contain `[project]` with `id` set to a 3-character Crockford base32 string.
-- [ ] **FMT-CFG-002** — When `vat.toml` is missing or `project.id` is invalid, the system shall abort with an error pointing the user at `vat init`.
-- [ ] **FMT-CFG-003** — When writing `vat.toml`, the system shall preserve unknown sections and keys.
+- [x] **FMT-CFG-001** — `backlog/vat.toml` shall contain `[project]` with `id` set to a 3-character Crockford base32 string.
+- [x] **FMT-CFG-002** — When `vat.toml` is missing or `project.id` is invalid, the system shall abort with an error pointing the user at `vat init`.
+- [x] **FMT-CFG-003** — When writing `vat.toml`, the system shall preserve unknown sections and keys.
 
 ## Global config
 

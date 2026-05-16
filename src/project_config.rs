@@ -5,7 +5,7 @@
 use thiserror::Error;
 use toml::Value;
 
-use crate::base32::{self, Base32Error};
+use crate::base32::{Base32Error, validate};
 
 const PROJECT_ID_LEN: usize = 3;
 
@@ -31,28 +31,77 @@ pub(crate) struct ProjectConfig {
 
 impl ProjectConfig {
     // @spec FMT-CFG-001
-    pub(crate) fn new(_project_id: &str) -> Result<Self, ConfigError> {
-        unimplemented!()
+    pub(crate) fn new(project_id: &str) -> Result<Self, ConfigError> {
+        let normalized = validate_and_normalize(project_id)?;
+        let mut document = Value::Table(toml::value::Table::new());
+        write_project_id(&mut document, &normalized);
+        Ok(Self {
+            document,
+            project_id: normalized,
+        })
     }
 
     pub(crate) fn project_id(&self) -> &str {
-        unimplemented!()
+        &self.project_id
     }
 
     // @spec FMT-CFG-001
-    pub(crate) fn set_project_id(&mut self, _id: &str) -> Result<(), ConfigError> {
-        unimplemented!()
+    pub(crate) fn set_project_id(&mut self, id: &str) -> Result<(), ConfigError> {
+        let normalized = validate_and_normalize(id)?;
+        write_project_id(&mut self.document, &normalized);
+        self.project_id = normalized;
+        Ok(())
     }
 
     // @spec FMT-CFG-003
     pub(crate) fn serialize(&self) -> String {
-        unimplemented!()
+        toml::to_string(&self.document)
+            .expect("serializing toml::Value with string keys cannot fail")
     }
 }
 
 // @spec FMT-CFG-001, FMT-CFG-002, FMT-CFG-003
-pub(crate) fn parse(_input: &str) -> Result<ProjectConfig, ConfigError> {
-    unimplemented!()
+pub(crate) fn parse(input: &str) -> Result<ProjectConfig, ConfigError> {
+    let document: Value = input
+        .parse::<Value>()
+        .map_err(|e| ConfigError::Parse(e.to_string()))?;
+
+    let project = document
+        .get("project")
+        .ok_or(ConfigError::MissingProject)?
+        .as_table()
+        .ok_or(ConfigError::MissingProject)?;
+
+    let id_value = project.get("id").ok_or(ConfigError::MissingProjectId)?;
+    let id_str = id_value.as_str().ok_or(ConfigError::ProjectIdNotString)?;
+    let normalized = validate_and_normalize(id_str)?;
+
+    Ok(ProjectConfig {
+        document,
+        project_id: normalized,
+    })
+}
+
+fn validate_and_normalize(id: &str) -> Result<String, ConfigError> {
+    validate(id, PROJECT_ID_LEN)?;
+    Ok(id.to_ascii_lowercase())
+}
+
+fn write_project_id(document: &mut Value, id: &str) {
+    let Value::Table(root) = document else {
+        unreachable!("ProjectConfig.document is always a Table");
+    };
+    let project_entry = root
+        .entry("project".to_string())
+        .or_insert_with(|| Value::Table(toml::value::Table::new()));
+    // If someone hand-edited [project] to a non-table value, replace it.
+    if !project_entry.is_table() {
+        *project_entry = Value::Table(toml::value::Table::new());
+    }
+    let Value::Table(project_table) = project_entry else {
+        unreachable!("just-ensured Table");
+    };
+    project_table.insert("id".to_string(), Value::String(id.to_string()));
 }
 
 #[cfg(test)]
@@ -63,17 +112,17 @@ mod tests {
     // @spec FMT-CFG-001
     #[test]
     fn parse_accepts_valid_project_id() {
-        let input = "[project]\nid = \"foo\"\n";
+        let input = "[project]\nid = \"bar\"\n";
         let cfg = parse(input).expect("valid config should parse");
-        assert_eq!(cfg.project_id(), "foo");
+        assert_eq!(cfg.project_id(), "bar");
     }
 
     // @spec FMT-CFG-001
     #[test]
     fn parse_normalizes_uppercase_project_id_to_lowercase() {
-        let input = "[project]\nid = \"FoO\"\n";
+        let input = "[project]\nid = \"BaR\"\n";
         let cfg = parse(input).expect("mixed-case base32 should parse");
-        assert_eq!(cfg.project_id(), "foo");
+        assert_eq!(cfg.project_id(), "bar");
     }
 
     // @spec FMT-CFG-002
@@ -119,7 +168,7 @@ mod tests {
     // @spec FMT-CFG-001, FMT-CFG-002
     #[test]
     fn parse_rejects_invalid_char_in_project_id() {
-        let input = "[project]\nid = \"fol\"\n";
+        let input = "[project]\nid = \"abl\"\n";
         assert_eq!(
             parse(input).err(),
             Some(ConfigError::InvalidProjectId(Base32Error::InvalidChar {
@@ -132,7 +181,7 @@ mod tests {
     // @spec FMT-CFG-002
     #[test]
     fn parse_rejects_malformed_toml() {
-        let input = "[project\nid = \"foo\"\n";
+        let input = "[project\nid = \"bar\"\n";
         match parse(input) {
             Err(ConfigError::Parse(_)) => {}
             other => panic!("expected ConfigError::Parse, got {other:?}"),
@@ -162,7 +211,7 @@ mod tests {
     // @spec FMT-CFG-003
     #[test]
     fn round_trip_preserves_unknown_top_level_sections() {
-        let input = "[project]\nid = \"foo\"\n\n[user]\nname = \"jared\"\n";
+        let input = "[project]\nid = \"bar\"\n\n[user]\nname = \"jared\"\n";
         let cfg = parse(input).unwrap();
         let out = cfg.serialize();
         let reparsed: toml::Value = out.parse().unwrap();
@@ -178,19 +227,19 @@ mod tests {
                 .get("project")
                 .and_then(|v| v.get("id"))
                 .and_then(|v| v.as_str()),
-            Some("foo")
+            Some("bar")
         );
     }
 
     // @spec FMT-CFG-003
     #[test]
     fn round_trip_preserves_unknown_keys_in_project_table() {
-        let input = "[project]\nid = \"foo\"\nextra = \"keep me\"\nnumber = 42\n";
+        let input = "[project]\nid = \"bar\"\nextra = \"keep me\"\nnumber = 42\n";
         let cfg = parse(input).unwrap();
         let out = cfg.serialize();
         let reparsed: toml::Value = out.parse().unwrap();
         let project = reparsed.get("project").unwrap();
-        assert_eq!(project.get("id").and_then(|v| v.as_str()), Some("foo"));
+        assert_eq!(project.get("id").and_then(|v| v.as_str()), Some("bar"));
         assert_eq!(
             project.get("extra").and_then(|v| v.as_str()),
             Some("keep me")
@@ -226,7 +275,7 @@ mod tests {
     // @spec FMT-CFG-001, FMT-CFG-003
     #[test]
     fn set_project_id_updates_value_and_preserves_unknown_sections() {
-        let input = "[project]\nid = \"foo\"\n\n[user]\nname = \"jared\"\n";
+        let input = "[project]\nid = \"bar\"\n\n[user]\nname = \"jared\"\n";
         let mut cfg = parse(input).unwrap();
         cfg.set_project_id("BaZ").unwrap();
         assert_eq!(cfg.project_id(), "baz");
@@ -245,9 +294,9 @@ mod tests {
     // @spec FMT-CFG-001
     #[test]
     fn set_project_id_rejects_invalid_id_without_mutating() {
-        let input = "[project]\nid = \"foo\"\n";
+        let input = "[project]\nid = \"bar\"\n";
         let mut cfg = parse(input).unwrap();
         assert!(cfg.set_project_id("bad-id").is_err());
-        assert_eq!(cfg.project_id(), "foo");
+        assert_eq!(cfg.project_id(), "bar");
     }
 }
