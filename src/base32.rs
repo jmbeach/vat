@@ -98,7 +98,10 @@ mod tests {
         let s = "!!@@##$$";
         assert_eq!(
             validate(s, 5),
-            Err(Base32Error::WrongLength { expected: 5, got: 8 })
+            Err(Base32Error::WrongLength {
+                expected: 5,
+                got: 8
+            })
         );
     }
 
