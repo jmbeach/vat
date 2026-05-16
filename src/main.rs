@@ -1,4 +1,5 @@
 mod base32;
+mod frontmatter;
 
 use clap::{Parser, Subcommand};
 
