@@ -6,7 +6,6 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-h8x] [in-progress] [by:jared] Project config loader (`backlog/vat.toml`) (see ./items/vat-h8x.md)
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
 - [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
 - [vat-d6t] Markdown parser: body region split (see ./items/vat-d6t.md)
@@ -25,7 +24,7 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-x8n] [blocked-by:vat-j3z] `vat block <id> <blocker-id>` command (see ./items/vat-x8n.md)
 - [vat-y2p] [blocked-by:vat-j3z] `vat unblock <id>` command (see ./items/vat-y2p.md)
 - [vat-z4q] [blocked-by:vat-j3z] `vat done <id>` command (see ./items/vat-z4q.md)
-- [vat-b6r] [blocked-by:vat-h8x] `vat config get/set` commands (see ./items/vat-b6r.md)
+- [vat-b6r] `vat config get/set` commands (see ./items/vat-b6r.md)
 - [vat-c9s] Exit codes wiring (see ./items/vat-c9s.md)
 - [vat-d3t] [blocked-by:vat-v3k] Snapshot / golden-file tests for sync (see ./items/vat-d3t.md)
 - [vat-f7v] [blocked-by:vat-z4q] Snapshot tests for the other commands (see ./items/vat-f7v.md)
