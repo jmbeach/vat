@@ -1,6 +1,6 @@
 ---
 name: vat
-description: Manage a VAT backlog — assign IDs to new bullets (sync), claim tasks (start), block/unblock, mark done, and read/write project & user config. Use whenever the user says "vat sync", "claim foo-7k2", "mark X done", "ID that bullet", "extract notes", or otherwise asks for any operation on `backlog/backlog.md`, `backlog/items/`, `backlog/vat.toml`, `backlog/.used-ids`, or `~/.config/vat/config.toml`. Stopgap implementation while the Rust binary is built — drop this skill into any project to use VAT before the binary lands.
+description: Manage a VAT backlog — assign IDs to new bullets (sync), claim tasks (start), block/unblock, mark done, and read/write project & user config. Use whenever the user says "vat sync", "claim foo-7k2", "mark X done", "ID that bullet", "extract notes", or otherwise asks for any operation on `backlog/backlog.md`, `backlog/items/`, `backlog/vat.toml`, `backlog/.used-ids`, or `~/.config/vat/config.toml`. Supports both local mode (backlog tracked in the project repo) and remote-backed mode (backlog is a managed clone of a dedicated repo, with race-free `git push` claims across many concurrent agents). Stopgap implementation while the Rust binary is built — drop this skill into any project to use VAT before the binary lands.
 argument-hint: <subcommand> [args...]
 allowed-tools: Read, Write, Edit, Bash
 ---
@@ -33,6 +33,22 @@ backlog/
 ```
 
 Nothing outside this set is ever written.
+
+## Storage modes
+
+VAT runs in one of two modes, **auto-detected** by testing `test -e backlog/.git`:
+
+### Local mode (default — present behaviour)
+
+`backlog/` is a plain directory tracked by the **project's own repo**. No network, ever. Concurrency across collaborators is resolved by ordinary git merge of the project repo, exactly as the HLD describes. None of the refresh/push machinery below applies — the procedures run as written.
+
+### Remote-backed mode
+
+`backlog/` is a **managed clone of a dedicated backlog git repo** — it has its own `backlog/.git`, and the project repo **gitignores** `backlog/`. The backlog therefore lives outside the project's git history and governance: no submodule, no pinned commit, no approval gate on the project repo, always the freshest copy.
+
+In this mode every command first **refreshes** the clone from its remote (so it reads the freshest state), and every *mutating* command **commits and pushes** inside an **atomic claim loop**. `git push` is the compare-and-swap: the first push wins, and a single `backlog.md` is enough to make `vat start` a race-free claim across an unbounded number of concurrent agents — no server, no daemon.
+
+`backlog/.git` is owned by git, never hand-written. In remote-backed mode VAT may also append a `/backlog/` line to the **project** `.gitignore` (at `vat init --remote` time only).
 
 ## When to invoke
 
@@ -159,7 +175,63 @@ All writes are whole-file rewrites. Normalize CRLF → `\n` on read. Output alwa
 
 All-or-nothing: if any error occurs during parsing/ID-generation/validation, no files are mutated.
 
+### Remote refresh (remote-backed mode only)
+
+Before reading state in **any** command, sync the clone to the freshest remote state:
+
+```bash
+BR=$(git -C backlog symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')
+BR=${BR:-main}
+git -C backlog fetch --quiet origin "$BR"
+git -C backlog reset --hard --quiet "origin/$BR"
+```
+
+`reset --hard` is safe because the clone is a throwaway working copy VAT fully owns — it holds nothing that isn't (or won't be) on the remote. That is exactly why the project `.gitignore`s `backlog/`: no other tooling depends on its working tree.
+
+### Atomic push / claim loop (remote-backed mode only)
+
+Every **mutating** command runs its read→decide→mutate→write step *inside* this loop:
+
+```
+MAX = 5
+attempt = 0
+loop:
+    refresh                       # fetch + reset --hard origin/$BR  → freshest state
+    re-read backlog state from the refreshed files
+    evaluate the command's preconditions on THIS fresh state:
+        if a terminal precondition now holds (see table) →
+            report that terminal result and STOP. Do NOT push, do NOT retry.
+    apply the local mutation (write files)
+    git -C backlog add -A
+    git -C backlog commit --quiet -m "<command message>"
+    if  git -C backlog push --quiet origin HEAD:$BR  succeeds:
+        report success; STOP
+    else:                          # rejected — the remote head moved under us
+        attempt += 1
+        if attempt >= MAX:
+            report "could not sync <id> after MAX attempts; try again" (exit 2); STOP
+        sleep a random jitter in [0, min(2^attempt × 0.1s, 2s)]   # disperse herds
+        continue                   # refresh re-runs the decision on the winner's state
+```
+
+**First push wins; losers re-decide; never hand-merge.** On a rejected push VAT does *not* rebase the stale edit — it `reset --hard`s to the winner's state and re-runs the command's decision from scratch. So there is never a textual merge conflict, not even a false one between two *different* tasks edited on nearby lines. The only thing that ends a retry early is a **terminal precondition** — which is precisely the lock telling you that you lost.
+
+**Per-command terminal preconditions** (re-checked after each refresh; if true, stop without pushing):
+
+| Command | Terminal precondition on fresh state | Terminal report |
+|---|---|---|
+| `start <id>` | bullet already has `[in-progress]` or `[by:…]` | `lost claim: <id> already claimed by <name>` (exit 1) |
+| `done <id>` | `<id>` no longer present (done elsewhere) | `already done: <id>` (exit 0) |
+| `block`/`unblock` | request already satisfied (idempotent) | the command's normal no-op success |
+| `sync` | — none; always re-runs against fresh content | — |
+
+`sync` has no terminal precondition: each retry re-runs the full sync against the fresh content. IDs it generates may differ between discarded attempts (random); only the pushed attempt's IDs reach `.used-ids`, so this is harmless.
+
+**Non-mutating reads** (`vat config get`, plain listing) only **refresh**, then read — no commit, no push, no loop.
+
 ## Procedures
+
+In **remote-backed mode**, every mutating procedure below executes inside the **atomic claim loop** above: the loop owns refresh / commit / push / retry, and the procedure body *is* the "re-read + decide + mutate + write" step (with its terminal precondition from the table). In **local mode** the procedures run exactly as written, with no network.
 
 ### `vat sync`
 
@@ -207,9 +279,9 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
 
 1. Load user config. Require `user.name`. If missing: `set user.name first: vat config set user.name <name>`.
 2. Run version check; locate the entry by `[id]`. Not found → `unknown id: <id>`.
-3. If bullet has `[in-progress]` or `[by:...]` → `<id> already claimed by <name>` (or `... already in progress` if only `[in-progress]` present from a hand-edit). Both forms count as "claimed".
+3. If bullet has `[in-progress]` or `[by:...]` → `<id> already claimed by <name>` (or `... already in progress` if only `[in-progress]` present from a hand-edit). Both forms count as "claimed". In remote-backed mode this is the loop's **terminal precondition**: report `lost claim: <id> already claimed by <name>` and stop (no push, no retry) — this is the first-push-wins lock signalling you lost.
 4. Insert `[in-progress]` and `[by:<user.name>]` in canonical position.
-5. Re-serialize the parsed region and write.
+5. Re-serialize the parsed region and write. (Remote-backed mode: the surrounding claim loop then commits with message `start <id>` and pushes; a rejected push refreshes and re-runs from step 2.)
 
 ### `vat block <id> <blocker-id>`
 
@@ -237,12 +309,15 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
 
 `vat done` on a blocked task is allowed (no warning).
 
-### `vat init [<prefix>]`
+### `vat init [<prefix>]` / `vat init --remote <url> [<prefix>]`
 
-1. If `backlog/` exists → `backlog/ already exists; vat is initialized`.
-2. Resolve prefix: argument takes precedence; otherwise prompt the user.
-3. Validate prefix: exactly 3 chars, all in Crockford base32 (case-insensitive); store lowercase.
-4. Create `backlog/` and write:
+Common guard: if `backlog/` exists → `backlog/ already exists; vat is initialized`.
+
+#### Local form: `vat init [<prefix>]`
+
+1. Resolve prefix: argument takes precedence; otherwise prompt the user.
+2. Validate prefix: exactly 3 chars, all in Crockford base32 (case-insensitive); store lowercase.
+3. Create `backlog/` and write:
    - `backlog/vat.toml` containing `[project]\nid = "<prefix>"\n`.
    - `backlog/backlog.md` containing only:
      ```
@@ -252,6 +327,16 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
      ```
    - `backlog/.used-ids` empty.
    - `backlog/README.md` from the template below.
+
+#### Remote-backed form: `vat init --remote <url> [<prefix>]`
+
+1. Clone the dedicated backlog repo into `backlog/`: `git clone <url> backlog`.
+2. Ensure the **project** repo ignores the clone: if neither `backlog/` nor `/backlog/` appears in the project `.gitignore`, append a line `/backlog/` (create `.gitignore` if absent). This is the only time VAT writes outside the file set.
+3. Determine whether the clone is empty (a fresh remote: `git -C backlog rev-parse HEAD` fails) or already a VAT backlog:
+   - **Empty remote** → `<prefix>` is **required** (error `vat init --remote needs a 3-char prefix for a fresh backlog` if absent). Validate it, then scaffold the same four files as the local form *inside* `backlog/`, and commit + push them via the atomic claim loop (commit message `chore: vat init`).
+   - **Non-empty remote** → it is already a VAT backlog; do **not** scaffold. Refresh it, then verify `backlog/vat.toml` has a valid `project.id`; if not, abort with `cloned repo is not a VAT backlog (missing project.id)`. Ignore any `<prefix>` argument (warn if it conflicts with the repo's `project.id`).
+
+From this point all commands auto-detect remote-backed mode via `backlog/.git`.
 
 **`backlog/README.md` template** (substitute `<prefix>`):
 
@@ -303,6 +388,8 @@ Exactly these — never anything else:
 - `backlog/vat.toml`
 - `backlog/README.md` (init only)
 - `~/.config/vat/config.toml` (or `$XDG_CONFIG_HOME/vat/config.toml`)
+- `backlog/.git` — only via `git` (clone/fetch/reset/commit/push), never hand-edited (remote-backed mode)
+- the project `.gitignore` — a single appended `/backlog/` line, `vat init --remote` only (remote-backed mode)
 
 ## Output
 
