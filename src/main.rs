@@ -1,4 +1,5 @@
 mod base32;
+mod file_io;
 mod frontmatter;
 mod project_config;
 
