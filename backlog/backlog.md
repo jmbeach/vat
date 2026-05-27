@@ -8,8 +8,7 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 
 - [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
 - [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
-- [vat-d6t] Markdown parser: body region split (see ./items/vat-d6t.md)
-- [vat-f1w] [blocked-by:vat-d6t] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
+- [vat-f1w] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
 - [vat-g5y] [blocked-by:vat-f1w] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
 - [vat-j3z] [blocked-by:vat-g5y] Bullet line serializer (canonical order) (see ./items/vat-j3z.md)
 - [vat-m8b] Line-ending normalization (see ./items/vat-m8b.md)
