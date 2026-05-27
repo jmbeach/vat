@@ -24,7 +24,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **SYNC-NOTES-001** — When a bullet has note lines associated with it, `vat sync` shall remove those lines from `backlog.md`.
 - [ ] **SYNC-NOTES-002** — When a bullet has note lines whose trimmed content is non-empty and no `backlog/items/<id>.md` exists, `vat sync` shall create that file with frontmatter `id: <id>` and the trimmed notes as the body.
 - [ ] **SYNC-NOTES-003** — When a bullet has note lines whose trimmed content is non-empty and `backlog/items/<id>.md` already exists, `vat sync` shall append a blank line followed by the trimmed notes to the existing body.
-- [ ] **SYNC-NOTES-004** — When extracting notes, `vat sync` shall strip the minimum common leading whitespace across the note lines and trim leading and trailing blank lines.
+- [ ] **SYNC-NOTES-004** — When extracting notes, `vat sync` shall first trim leading and trailing blank lines, then strip the longest common leading-whitespace *byte* prefix shared by all remaining non-blank lines. Leading whitespace is the run of space and tab bytes at the start of a line; the common prefix is compared byte-for-byte (a tab and a space do not match), so notes whose non-blank lines do not share an identical leading-whitespace prefix are left un-stripped. Interior blank lines are preserved as empty lines and do not contribute to the common prefix.
 - [ ] **SYNC-NOTES-005** — When a bullet's note lines are empty after trimming (only whitespace and blank lines), `vat sync` shall not create or modify any item file but shall still remove those lines from `backlog.md`.
 
 ## Item-file pointer suffix

@@ -39,7 +39,9 @@
         - Insert the [id] marker at the front of the bullet (before any other markers).
    b. Normalize markers on the bullet line into canonical order with single-space separators.
    c. If the entry has notes:
-        - Strip indentation (min common leading whitespace) and trim leading/trailing blank lines.
+        - Strip indentation (longest common leading-whitespace byte prefix across
+          non-blank lines; tab ≠ space) and trim leading/trailing blank lines.
+          See the [format LLD](./backlog-format.md) and SYNC-NOTES-004.
         - If the result is empty (the notes were only whitespace/blank lines):
             do nothing — do not create an item file, do not append.
         - Else if items/<id>.md does not exist:
