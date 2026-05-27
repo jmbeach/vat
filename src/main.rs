@@ -1,6 +1,7 @@
 mod base32;
 mod frontmatter;
 mod project_config;
+mod user_config;
 
 use clap::{Parser, Subcommand};
 

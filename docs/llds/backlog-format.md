@@ -132,8 +132,44 @@ id = "foo"   # exactly 3 characters, Crockford base32 alphabet
 name = "jared"
 ```
 
-- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml`.
+- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `$HOME/.config/vat/config.toml`.
 - `user.name` is optional in the file; commands that require it (`vat start`) error with a pointer to `vat config set user.name <name>` if missing.
+
+### Module: `src/user_config.rs`
+
+Mirrors the shape of `src/project_config.rs`: a pure `UserConfig` value with parse/serialize, plus a thin I/O layer in the same file for path resolution, load, and save.
+
+**Pure surface (parse / serialize):**
+
+- `UserConfig::empty() -> UserConfig` — an empty in-memory config (no `[user]` table). Returned by `load` when the file is absent only if the caller maps `NotFound` that way; the loader itself returns the variant.
+- `parse(input: &str) -> Result<UserConfig, UserConfigError>` — parses TOML.
+- `UserConfig::user_name() -> Option<&str>` — `None` when `[user]` is absent or `name` is absent.
+- `UserConfig::set_user_name(&mut self, &str) -> Result<(), UserConfigError>` — refuses empty string (see FMT-USR-004).
+- `UserConfig::serialize(&self) -> String` — round-trips unknown sections and keys (same `toml::Value`-backed approach as `project_config.rs`).
+
+**I/O surface (path / load / save), in the same module:**
+
+- `config_path() -> Result<PathBuf, UserConfigError>` — resolves the file location:
+  1. If `$XDG_CONFIG_HOME` is set, non-empty, **and absolute**, use `$XDG_CONFIG_HOME/vat/config.toml`.
+  2. Else if `$HOME` is set and non-empty, use `$HOME/.config/vat/config.toml`.
+  3. Else error `UserConfigError::NoHome`.
+- `load(path: &Path) -> Result<UserConfig, UserConfigError>` — reads and parses. If the file is missing, returns `UserConfigError::NotFound` so callers can distinguish "no config yet" from "parse error". Other `io::Error`s become `UserConfigError::Io`.
+- `save(&self, path: &Path) -> Result<(), UserConfigError>` — creates parent directories with `fs::create_dir_all`, then writes the serialized string directly to `path` (`fs::write`). No temp file, no rename. Default file permissions (0644 on POSIX); no special-casing.
+
+**Errors.** `UserConfigError`:
+
+- `Parse(String)` — malformed TOML.
+- `UserNameNotString` — `[user] name` is present but not a string (FMT-USR-003).
+- `UserNameEmpty` — `[user] name` is the empty string (FMT-USR-004).
+- `NotFound` — config file does not exist on `load`.
+- `NoHome` — neither `$XDG_CONFIG_HOME` (absolute) nor `$HOME` is usable.
+- `Io(io::Error)` — other read/write failures.
+
+Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); `user_name()` returns `None`.
+
+**Direct write rationale.** User config writes happen via `vat config set user.name <value>` — interactive, infrequent, and trivial in size. `save` writes the serialized string straight to the file with `fs::write`. We do not use a temp-file-and-rename dance: the file is small, the write is a single syscall, and the offline-first model treats git (not the local filesystem) as the durability boundary.
+
+**Strict XDG path resolution rationale.** Empty `XDG_CONFIG_HOME` and relative `XDG_CONFIG_HOME` both fall through to `$HOME/.config` per the XDG Base Directory spec. We do not silently accept a relative `XDG_CONFIG_HOME` — it would produce paths relative to whatever directory `vat` was invoked from, which is almost never the user's intent.
 
 ## ID alphabet & generation
 

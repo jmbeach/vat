@@ -73,8 +73,11 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Global config
 
-- [ ] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml` when `XDG_CONFIG_HOME` is unset.
-- [ ] **FMT-USR-002** — `user.name` shall be optional in the user config file.
+- [x] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml` when `XDG_CONFIG_HOME` is set, non-empty, and absolute; otherwise at `$HOME/.config/vat/config.toml`.
+- [x] **FMT-USR-002** — `user.name` shall be optional in the user config file; an absent `[user]` table or absent `name` key shall not be an error.
+- [x] **FMT-USR-003** — When the user config file is present and `[user] name` exists but is not a string, the system shall abort with an error and shall not write to any file.
+- [x] **FMT-USR-004** — The system shall reject the empty string as a value for `user.name` on both read and write.
+- [x] **FMT-USR-005** — When writing the user config file, the system shall preserve unknown sections and keys.
 
 ## Line endings and whitespace
 
