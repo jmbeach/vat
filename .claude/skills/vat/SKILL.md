@@ -36,7 +36,7 @@ Nothing outside this set is ever written.
 
 ## Storage modes
 
-VAT runs in one of two modes, **auto-detected** by testing `test -e backlog/.git`:
+VAT runs in one of two modes, **auto-detected** by testing `test -d backlog/.git` (a dedicated clone always has `.git` as a *directory*; `test -e` would false-positive on a git worktree, whose `.git` is a *file*):
 
 ### Local mode (default — present behaviour)
 
@@ -49,6 +49,8 @@ VAT runs in one of two modes, **auto-detected** by testing `test -e backlog/.git
 In this mode every command first **refreshes** the clone from its remote (so it reads the freshest state), and every *mutating* command **commits and pushes** inside an **atomic claim loop**. `git push` is the compare-and-swap: the first push wins, and a single `backlog.md` is enough to make `vat start` a race-free claim across an unbounded number of concurrent agents — no server, no daemon.
 
 `backlog/.git` is owned by git, never hand-written. In remote-backed mode VAT may also append a `/backlog/` line to the **project** `.gitignore` (at `vat init --remote` time only).
+
+Remote-backed mode requires `git` to be available in `PATH`.
 
 ## When to invoke
 
@@ -203,16 +205,21 @@ loop:
             report that terminal result and STOP. Do NOT push, do NOT retry.
     apply the local mutation (write files)
     git -C backlog add -A
-    git -C backlog commit --quiet -m "<command message>"
-    if  git -C backlog push --quiet origin HEAD:$BR  succeeds:
+    git -C backlog commit --quiet -m "<commit message>"   # see message table below
+    run  git -C backlog push origin HEAD:$BR  (capture exit code + stderr)
+    if push succeeded:
         report success; STOP
-    else:                          # rejected — the remote head moved under us
+    else if stderr matches "rejected" or "non-fast-forward":   # contention: remote head moved
         attempt += 1
         if attempt >= MAX:
             report "could not sync <id> after MAX attempts; try again" (exit 2); STOP
         sleep a random jitter in [0, min(2^attempt × 0.1s, 2s)]   # disperse herds
         continue                   # refresh re-runs the decision on the winner's state
+    else:                          # infrastructure: network/auth/quota — retrying is pointless
+        report "push failed (not a race): <raw git stderr>" (exit 2); STOP
 ```
+
+Distinguishing the two push-failure classes matters: a contention rejection (`rejected` / `non-fast-forward`) is a normal race and retries; anything else (network unreachable, auth rejected, quota) fails fast with the raw git error, so the user isn't misled into thinking they lost a race after MAX wasted attempts.
 
 **First push wins; losers re-decide; never hand-merge.** On a rejected push VAT does *not* rebase the stale edit — it `reset --hard`s to the winner's state and re-runs the command's decision from scratch. So there is never a textual merge conflict, not even a false one between two *different* tasks edited on nearby lines. The only thing that ends a retry early is a **terminal precondition** — which is precisely the lock telling you that you lost.
 
@@ -224,6 +231,17 @@ loop:
 | `done <id>` | `<id>` no longer present (done elsewhere) | `already done: <id>` (exit 0) |
 | `block`/`unblock` | request already satisfied (idempotent) | the command's normal no-op success |
 | `sync` | — none; always re-runs against fresh content | — |
+
+**Commit messages** (the `<commit message>` in the loop) are fixed per command, so the remote history is predictable and auditable:
+
+| Command | Commit message |
+|---|---|
+| `sync` | `vat sync` |
+| `start <id>` | `start <id>` |
+| `done <id>` | `done <id>` |
+| `block <id> <blocker>` | `block <id> <blocker>` |
+| `unblock <id>` | `unblock <id>` |
+| `init` (scaffold) | `chore: vat init` |
 
 `sync` has no terminal precondition: each retry re-runs the full sync against the fresh content. IDs it generates may differ between discarded attempts (random); only the pushed attempt's IDs reach `.used-ids`, so this is harmless.
 
@@ -279,7 +297,7 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
 
 1. Load user config. Require `user.name`. If missing: `set user.name first: vat config set user.name <name>`.
 2. Run version check; locate the entry by `[id]`. Not found → `unknown id: <id>`.
-3. If bullet has `[in-progress]` or `[by:...]` → `<id> already claimed by <name>` (or `... already in progress` if only `[in-progress]` present from a hand-edit). Both forms count as "claimed". In remote-backed mode this is the loop's **terminal precondition**: report `lost claim: <id> already claimed by <name>` and stop (no push, no retry) — this is the first-push-wins lock signalling you lost.
+3. If bullet has `[in-progress]` or `[by:...]` → `<id> already claimed by <name>` (or `... already in progress` if only `[in-progress]` present from a hand-edit). Both forms count as "claimed". In remote-backed mode this is the loop's **terminal precondition**: always report `lost claim: <id> already claimed by <name>` — uniformly, regardless of which markers are present (a hand-edited `[in-progress]` on the remote is still a remote win) — and stop (no push, no retry). This is the first-push-wins lock signalling you lost.
 4. Insert `[in-progress]` and `[by:<user.name>]` in canonical position.
 5. Re-serialize the parsed region and write. (Remote-backed mode: the surrounding claim loop then commits with message `start <id>` and pushes; a rejected push refreshes and re-runs from step 2.)
 
@@ -331,10 +349,12 @@ Common guard: if `backlog/` exists → `backlog/ already exists; vat is initiali
 #### Remote-backed form: `vat init --remote <url> [<prefix>]`
 
 1. Clone the dedicated backlog repo into `backlog/`: `git clone <url> backlog`.
-2. Ensure the **project** repo ignores the clone: if neither `backlog/` nor `/backlog/` appears in the project `.gitignore`, append a line `/backlog/` (create `.gitignore` if absent). This is the only time VAT writes outside the file set.
-3. Determine whether the clone is empty (a fresh remote: `git -C backlog rev-parse HEAD` fails) or already a VAT backlog:
+2. Ensure the **project** repo ignores the clone: if none of `backlog`, `backlog/`, or `/backlog/` already appears in the project `.gitignore`, append a line `/backlog/` (create `.gitignore` if absent). **Do not append** if `.gitignore` contains a negation for the path (e.g. `!backlog/`): appending after a negation silently overrides it (last gitignore rule wins) and could drop files the user meant to track — instead warn the user and leave `.gitignore` untouched. This is the only time VAT writes outside the file set.
+3. Determine whether the clone is empty (a fresh remote: `git -C backlog rev-parse HEAD 2>/dev/null` fails) or already a VAT backlog:
    - **Empty remote** → `<prefix>` is **required** (error `vat init --remote needs a 3-char prefix for a fresh backlog` if absent). Validate it, then scaffold the same four files as the local form *inside* `backlog/`, and commit + push them via the atomic claim loop (commit message `chore: vat init`).
    - **Non-empty remote** → it is already a VAT backlog; do **not** scaffold. Refresh it, then verify `backlog/vat.toml` has a valid `project.id`; if not, abort with `cloned repo is not a VAT backlog (missing project.id)`. Ignore any `<prefix>` argument (warn if it conflicts with the repo's `project.id`).
+
+**Partial-failure cleanup:** step 2 may have already mutated `.gitignore` before step 3 runs. If step 3 aborts (e.g. `cloned repo is not a VAT backlog`), `backlog/` is left on disk in an undefined state — the user must `rm -rf backlog/` (and revert the `.gitignore` line) before retrying, otherwise the next `vat` command will detect `backlog/.git` and enter remote-backed mode against a broken clone.
 
 From this point all commands auto-detect remote-backed mode via `backlog/.git`.
 
@@ -343,7 +363,7 @@ From this point all commands auto-detect remote-backed mode via `backlog/.git`.
 ```markdown
 # Backlog
 
-This directory is managed by [VAT](https://github.com/) (Versioned Addressable Tasks) — a tiny tool for capturing tasks as plain markdown.
+This directory is managed by [VAT](https://github.com/jmbeach/vat) (Versioned Addressable Tasks) — a tiny tool for capturing tasks as plain markdown.
 
 ## Files
 
