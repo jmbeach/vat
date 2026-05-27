@@ -61,9 +61,15 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Tombstone file
 
-- [ ] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
-- [ ] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
-- [ ] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
+- [x] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
+- [x] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-004** — When reading `backlog/.used-ids`, the system shall reject any line that, after trimming surrounding ASCII whitespace, does not match the Crockford `<3>-<3>` ID format, identifying the 1-based line number of the offending content.
+- [x] **FMT-TOMB-005** — When reading `backlog/.used-ids`, the system shall normalize each ID to lowercase before insertion into the returned set.
+- [x] **FMT-TOMB-006** — When appending to `backlog/.used-ids` and the existing file does not end with a `\n` byte, the system shall write a leading `\n` before the appended content.
+- [x] **FMT-TOMB-007** — When appending to `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return a distinct error identifying the missing project directory and shall not create the directory.
+- [x] **FMT-TOMB-008** — When appending IDs to `backlog/.used-ids`, the system shall write each supplied ID as its own line in input order, performing no deduplication against existing contents or within the batch; an empty input shall leave the filesystem unchanged.
+- [x] **FMT-TOMB-009** — When reading `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return the same distinct missing-project-directory error as the writer (FMT-TOMB-007), rather than treating the file as empty. A missing file within an existing `backlog/` remains empty per FMT-TOMB-002.
 
 ## Project config
 

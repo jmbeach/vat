@@ -1,6 +1,7 @@
 mod base32;
 mod frontmatter;
 mod project_config;
+mod tombstone;
 
 use clap::{Parser, Subcommand};
 
