@@ -6,13 +6,13 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
-- [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
+- [vat-r2n] [in-progress] [by:jared] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
+- [vat-v4j] [in-progress] [by:jared] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
 - [vat-f1w] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
 - [vat-g5y] [blocked-by:vat-f1w] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
 - [vat-j3z] [blocked-by:vat-g5y] Bullet line serializer (canonical order) (see ./items/vat-j3z.md)
-- [vat-m8b] Line-ending normalization (see ./items/vat-m8b.md)
-- [vat-n4c] Item file read/write/append (`backlog/items/<id>.md`) (see ./items/vat-n4c.md)
+- [vat-m8b] [in-progress] [by:jared] Line-ending normalization (see ./items/vat-m8b.md)
+- [vat-n4c] [in-progress] [by:jared] Item file read/write/append (`backlog/items/<id>.md`) (see ./items/vat-n4c.md)
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
 - [vat-q2e] [blocked-by:vat-r6f] `vat init` command (see ./items/vat-q2e.md)
 - [vat-r6f] README template (baked into binary) (see ./items/vat-r6f.md)
