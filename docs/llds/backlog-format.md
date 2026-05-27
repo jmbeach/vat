@@ -37,6 +37,16 @@ Unknown frontmatter keys are preserved on rewrite. The frontmatter, if present, 
 
 A file without frontmatter is fully supported — frontmatter only becomes mandatory if/when a future major version requires it.
 
+### Version check helper
+
+A single cross-cutting helper in the frontmatter module gates every read path on the schema version. `SUPPORTED_MAJOR` is a module const (currently `1`) naming the highest major this CLI understands. `check_version(&Frontmatter)` reads the parsed `version` (defaulting to 1 when frontmatter is absent, empty, or has a non-integer `version` per FMT-FM-003) and returns `Err(UnsupportedVersion { found, supported })` when `found > SUPPORTED_MAJOR`, otherwise `Ok(())`. The error renders the standard message:
+
+```
+backlog file is version <found>, this CLI supports up to version <supported>; please upgrade vat.
+```
+
+The helper is pure — it never writes. Read-path commands call it immediately after parsing frontmatter and before any other processing (see commands LLD "Common machinery"); aborting on `Err` is what gives the "no writes when too new" guarantee. Wiring each command to call it lands with that command's own task.
+
 ### Body regions
 
 After any frontmatter, the body has two regions separated by the **first** line consisting solely of `---` (optionally surrounded by whitespace). v1 supports only `---` as the separator; the other CommonMark thematic-break forms (`***`, `___`) are not recognized.

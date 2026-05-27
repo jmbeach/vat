@@ -3,6 +3,20 @@
 #![allow(dead_code)]
 
 use serde_yaml::{Mapping, Value};
+use thiserror::Error;
+
+/// The highest backlog schema major version this CLI understands.
+pub(crate) const SUPPORTED_MAJOR: u64 = 1;
+
+// @spec FMT-FM-002
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error(
+    "backlog file is version {found}, this CLI supports up to version {supported}; please upgrade vat."
+)]
+pub(crate) struct UnsupportedVersion {
+    pub(crate) found: u64,
+    pub(crate) supported: u64,
+}
 
 pub(crate) struct Frontmatter {
     present: bool,
@@ -34,6 +48,22 @@ impl Frontmatter {
         }
         format!("---\n{}---\n", self.raw_body)
     }
+}
+
+// @spec FMT-FM-002
+//
+// Cross-cutting gate run at the top of every read-path command, after parsing
+// frontmatter and before any other work. Pure — it never writes; aborting on
+// the returned `Err` is what gives the "no writes when too new" guarantee.
+pub(crate) fn check_version(fm: &Frontmatter) -> Result<(), UnsupportedVersion> {
+    let found = fm.version();
+    if found > SUPPORTED_MAJOR {
+        return Err(UnsupportedVersion {
+            found,
+            supported: SUPPORTED_MAJOR,
+        });
+    }
+    Ok(())
 }
 
 // @spec FMT-FM-001, FMT-FM-003, FMT-FM-004
@@ -94,7 +124,70 @@ fn parse_yaml_mapping(raw_body: &str) -> Mapping {
 
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{SUPPORTED_MAJOR, UnsupportedVersion, check_version, parse};
+
+    // @spec FMT-FM-002
+    #[test]
+    fn version_equal_to_supported_passes() {
+        let r = parse("---\nversion: 1\n---\nbody\n");
+        assert_eq!(check_version(&r.frontmatter), Ok(()));
+    }
+
+    // @spec FMT-FM-002
+    #[test]
+    fn version_below_supported_passes() {
+        let r = parse("---\nversion: 0\n---\nbody\n");
+        assert_eq!(check_version(&r.frontmatter), Ok(()));
+    }
+
+    // @spec FMT-FM-002
+    #[test]
+    fn version_above_supported_is_rejected() {
+        let r = parse("---\nversion: 2\n---\nbody\n");
+        assert_eq!(
+            check_version(&r.frontmatter),
+            Err(UnsupportedVersion {
+                found: 2,
+                supported: SUPPORTED_MAJOR,
+            })
+        );
+    }
+
+    // @spec FMT-FM-002, FMT-FM-003
+    #[test]
+    fn absent_frontmatter_passes_as_version_1() {
+        let r = parse("just body\n");
+        assert_eq!(check_version(&r.frontmatter), Ok(()));
+    }
+
+    // @spec FMT-FM-002, FMT-FM-003
+    #[test]
+    fn empty_frontmatter_passes_as_version_1() {
+        let r = parse("---\n---\nbody\n");
+        assert_eq!(check_version(&r.frontmatter), Ok(()));
+    }
+
+    // @spec FMT-FM-002, FMT-FM-003
+    #[test]
+    fn non_integer_version_passes_as_version_1() {
+        let r = parse("---\nversion: \"two\"\n---\nbody\n");
+        assert_eq!(check_version(&r.frontmatter), Ok(()));
+    }
+
+    // @spec FMT-FM-002
+    #[test]
+    fn error_message_names_both_the_file_and_supported_versions() {
+        let r = parse("---\nversion: 7\n---\nbody\n");
+        let msg = check_version(&r.frontmatter)
+            .expect_err("version 7 should be rejected")
+            .to_string();
+        assert!(msg.contains('7'), "message should name the file version: {msg:?}");
+        assert!(msg.contains('1'), "message should name the supported version: {msg:?}");
+        assert!(
+            msg.contains("upgrade vat"),
+            "message should point the user at upgrading: {msg:?}"
+        );
+    }
 
     // @spec FMT-FM-001
     #[test]
