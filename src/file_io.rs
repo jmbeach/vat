@@ -1,5 +1,6 @@
 // @spec FMT-WS-001
 
+// Temporary: the IO layer has no callers yet; remove once a command wires it in.
 #![allow(dead_code)]
 
 use std::fs;
@@ -140,6 +141,23 @@ mod tests {
         write(&path, "alpha\nbeta\n").unwrap();
         let raw = std::fs::read(&path).unwrap();
         assert_eq!(raw, b"alpha\nbeta\n");
+    }
+
+    #[test]
+    fn write_preserves_crlf_verbatim() {
+        let dir = tempdir();
+        let path = dir.path().join("crlf_write.txt");
+        write(&path, "alpha\r\nbeta\r\n").unwrap();
+        let raw = std::fs::read(&path).unwrap();
+        assert_eq!(raw, b"alpha\r\nbeta\r\n");
+    }
+
+    #[test]
+    fn write_propagates_missing_parent_dir_error() {
+        let dir = tempdir();
+        let path = dir.path().join("missing").join("out.txt");
+        let err = write(&path, "data\n").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]
