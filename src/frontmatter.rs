@@ -181,8 +181,14 @@ mod tests {
         let msg = check_version(&r.frontmatter)
             .expect_err("version 7 should be rejected")
             .to_string();
-        assert!(msg.contains('7'), "message should name the file version: {msg:?}");
-        assert!(msg.contains('1'), "message should name the supported version: {msg:?}");
+        assert!(
+            msg.contains('7'),
+            "message should name the file version: {msg:?}"
+        );
+        assert!(
+            msg.contains('1'),
+            "message should name the supported version: {msg:?}"
+        );
         assert!(
             msg.contains("upgrade vat"),
             "message should point the user at upgrading: {msg:?}"
