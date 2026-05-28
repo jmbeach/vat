@@ -105,9 +105,11 @@ id: <full-id>
 ```
 
 - The frontmatter `id` field MUST equal the filename stem.
-- The body is the verbatim notes content, with the indentation that the notes had under the bullet stripped (the minimum common leading whitespace across all note lines, after dropping leading/trailing blank lines).
+- The body is the verbatim notes content, with the indentation that the notes had under the bullet stripped (the **longest common leading-whitespace byte prefix** across the non-blank note lines, after dropping leading/trailing blank lines). "Leading whitespace" is the run of space and tab bytes at the start of a line; the shared prefix is compared byte-for-byte, so a tab and a space never match and mixed-indentation notes whose lines disagree on the leading run are left un-stripped. Interior blank lines are preserved and excluded from the prefix computation. See [SYNC-NOTES-004](../specs/sync-specs.md).
 - On re-sync with new notes appended, VAT appends a single blank line to the existing body, then the new notes (with the same indentation-stripping rule applied to the new notes alone).
 - File created lazily — only when there are notes. Deleted on `vat done`.
+- Creating an item file is a *create*, not an upsert: it fails rather than overwrite an existing file (the sync caller routes existing files to the append path instead). Appending is done atomically (stage in a sibling temp file, then rename over the target) so an interrupted append never truncates the accumulated notes — consistent with sync's all-or-nothing write stance ([sync LLD](./sync.md#failure-modes)).
+- CRLF in incoming note text is normalized to LF before the file is written, so item files never carry stray `\r` bytes (FMT-WS-001 applies to the write path, not just reads).
 
 ## `backlog/.used-ids`
 

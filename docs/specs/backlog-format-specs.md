@@ -55,9 +55,9 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Item files
 
-- [ ] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
-- [ ] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
-- [ ] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
+- [x] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
+- [x] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
+- [x] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
 
 ## Tombstone file
 
