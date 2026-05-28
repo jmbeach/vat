@@ -142,10 +142,10 @@ Mirrors the shape of `src/project_config.rs`: a pure `UserConfig` value with par
 **Pure surface (parse / serialize):**
 
 - `UserConfig::empty() -> UserConfig` — an empty in-memory config (no `[user]` table). Returned by `load` when the file is absent only if the caller maps `NotFound` that way; the loader itself returns the variant.
-- `parse(input: &str) -> Result<UserConfig, UserConfigError>` — parses TOML.
+- `parse(input: &str) -> Result<UserConfig, UserConfigError>` — parses TOML. A present `[user]` element that is not a table (e.g. a bare scalar `user = "jared"`, or an array-of-tables) is rejected (`UserNotATable`, FMT-USR-006): `toml::Value::get("name")` returns `None` on a non-table, so without this guard a hand-edited scalar would parse cleanly and silently drop the value.
 - `UserConfig::user_name() -> Option<&str>` — `None` when `[user]` is absent or `name` is absent.
-- `UserConfig::set_user_name(&mut self, &str) -> Result<(), UserConfigError>` — refuses empty string (see FMT-USR-004).
-- `UserConfig::serialize(&self) -> String` — round-trips unknown sections and keys (same `toml::Value`-backed approach as `project_config.rs`).
+- `UserConfig::set_user_name(&mut self, &str) -> Result<(), UserConfigError>` — refuses empty or whitespace-only strings (see FMT-USR-004).
+- `UserConfig::serialize(&self) -> String` — round-trips unknown sections and keys (same `toml::Value`-backed approach as `project_config.rs`). The `toml` dependency enables the `preserve_order` feature so sections and keys keep their authored order rather than being alphabetized on rewrite.
 
 **I/O surface (path / load / save), in the same module:**
 
@@ -153,19 +153,22 @@ Mirrors the shape of `src/project_config.rs`: a pure `UserConfig` value with par
   1. If `$XDG_CONFIG_HOME` is set, non-empty, **and absolute**, use `$XDG_CONFIG_HOME/vat/config.toml`.
   2. Else if `$HOME` is set and non-empty, use `$HOME/.config/vat/config.toml`.
   3. Else error `UserConfigError::NoHome`.
-- `load(path: &Path) -> Result<UserConfig, UserConfigError>` — reads and parses. If the file is missing, returns `UserConfigError::NotFound` so callers can distinguish "no config yet" from "parse error". Other `io::Error`s become `UserConfigError::Io`.
-- `save(&self, path: &Path) -> Result<(), UserConfigError>` — creates parent directories with `fs::create_dir_all`, then writes the serialized string directly to `path` (`fs::write`). No temp file, no rename. Default file permissions (0644 on POSIX); no special-casing.
+- `load(path: &Path) -> Result<UserConfig, UserConfigError>` — reads and parses. If the file is missing, returns `UserConfigError::NotFound(path)` (carrying the resolved path) so callers can distinguish "no config yet" from "parse error" and tell the user where the binary looked. Other `io::Error`s become `UserConfigError::Io`.
+- `save(&self, path: &Path) -> Result<(), UserConfigError>` — creates parent directories with `fs::create_dir_all` (skipping the empty-parent case so a bare filename doesn't trip `create_dir_all("")`, which errors on Windows), then writes the serialized string directly to `path` (`fs::write`). No temp file, no rename. Default file permissions (0644 on POSIX); no special-casing.
 
 **Errors.** `UserConfigError`:
 
 - `Parse(String)` — malformed TOML.
+- `UserNotATable` — `[user]` is present but not a table (FMT-USR-006).
 - `UserNameNotString` — `[user] name` is present but not a string (FMT-USR-003).
-- `UserNameEmpty` — `[user] name` is the empty string (FMT-USR-004).
-- `NotFound` — config file does not exist on `load`.
+- `UserNameEmpty` — `[user] name` is empty or whitespace-only (FMT-USR-004).
+- `NotFound(PathBuf)` — config file does not exist on `load`; carries the path checked.
 - `NoHome` — neither `$XDG_CONFIG_HOME` (absolute) nor `$HOME` is usable.
 - `Io(io::Error)` — other read/write failures.
 
-Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); `user_name()` returns `None`.
+`UserConfigError` implements `PartialEq` by hand (comparing `Io` by `ErrorKind`, the rest by value) since `io::Error` is not `PartialEq`; this keeps `assert_eq!`-style assertions available, matching `ConfigError`.
+
+Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); `user_name()` returns `None`. A present-but-non-table `[user]`, however, is an error (FMT-USR-006) rather than being treated as absent.
 
 **Direct write rationale.** User config writes happen via `vat config set user.name <value>` — interactive, infrequent, and trivial in size. `save` writes the serialized string straight to the file with `fs::write`. We do not use a temp-file-and-rename dance: the file is small, the write is a single syscall, and the offline-first model treats git (not the local filesystem) as the durability boundary.
 
