@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: fmt
+            command: cargo fmt --all -- --check
+            components: rustfmt
+          - task: clippy
+            command: cargo clippy --all-targets --all-features -- -D warnings
+            components: clippy
+          - task: build
+            command: cargo build --all-targets --all-features --locked
+            components: ""
+          - task: test
+            command: cargo test --all-features --locked
+            components: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: ${{ matrix.components }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: ${{ matrix.task }}
+        run: ${{ matrix.command }}
