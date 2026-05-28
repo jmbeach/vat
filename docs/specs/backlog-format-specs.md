@@ -9,14 +9,14 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **FMT-FM-001** — When `backlog.md` begins with a line consisting solely of `---`, the system shall treat the content up to the next line consisting solely of `---` as YAML frontmatter.
 - [ ] **FMT-FM-002** — When the frontmatter contains a `version` key whose integer value is greater than the CLI's supported major version, the system shall abort the command with an error message naming the file's version and the CLI's supported version, and shall not write to any file.
 - [x] **FMT-FM-003** — When the frontmatter is absent or omits the `version` key, the system shall treat the file as version 1.
-- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim.
+- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim, modulo read-time line-ending normalization (see FMT-WS-001).
 - [ ] **FMT-FM-005** — When `vat init` creates `backlog.md`, the system shall write a frontmatter block containing `version: 1`.
 
 ## Body regions
 
 - [x] **FMT-RGN-001** — When `backlog.md` contains a line equal to exactly `---\n` after any frontmatter, the system shall treat content above that line as the parsed region and content after that line as the freeform region.
 - [x] **FMT-RGN-002** — When `backlog.md` contains no `---\n` separator line after any frontmatter, the system shall treat the entire body as the parsed region and the freeform region as absent.
-- [x] **FMT-RGN-003** — When writing `backlog.md` whose freeform region is present, the system shall emit the parsed region, then a single `---\n` separator line, then the freeform region byte-for-byte; when the freeform region is absent, the system shall emit only the parsed region.
+- [x] **FMT-RGN-003** — When writing `backlog.md` whose freeform region is present, the system shall emit the parsed region, then a single `---\n` separator line, then the freeform region byte-for-byte (modulo read-time line-ending normalization, see FMT-WS-001); when the freeform region is absent, the system shall emit only the parsed region.
 - [x] **FMT-RGN-004** — The system shall not recognize `***` or `___` as a region separator in v1.
 - [x] **FMT-RGN-005** — The system shall recognize only the exact byte sequence `---\n` as a body separator; lines with surrounding whitespace (e.g., `--- \n`, ` ---\n`) shall not be recognized as separators.
 - [x] **FMT-RGN-006** — When the body ends with an unterminated `---` not followed by a newline, the system shall treat the body as having no separator.
@@ -58,9 +58,9 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Item files
 
-- [ ] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
-- [ ] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
-- [ ] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
+- [x] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
+- [x] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
+- [x] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
 
 ## Tombstone file
 
@@ -79,7 +79,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [ ] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml` when `XDG_CONFIG_HOME` is unset.
 - [ ] **FMT-USR-002** — `user.name` shall be optional in the user config file.
 
-## Line endings and whitespace
+## Line endings, whitespace, and IO normalization
 
-- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize CRLF line endings to LF.
+- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF. (Normalization infrastructure landed in `file_io`; marker stays `[ ]` pending caller wiring.)
 - [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.

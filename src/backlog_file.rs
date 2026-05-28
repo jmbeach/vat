@@ -92,9 +92,9 @@ pub(crate) struct Frontmatter {
     parsed: Mapping,
 }
 
-struct FrontmatterParse<'a> {
-    frontmatter: Frontmatter,
-    body: &'a str,
+pub(crate) struct FrontmatterParse<'a> {
+    pub(crate) frontmatter: Frontmatter,
+    pub(crate) body: &'a str,
 }
 
 impl Frontmatter {
@@ -126,7 +126,7 @@ impl Frontmatter {
 // silently parses as no-frontmatter — which would let a `version: N` file
 // from a Windows editor skip the FMT-FM-002 version check. Callers must
 // normalize line endings upstream.
-fn parse_frontmatter(input: &str) -> FrontmatterParse<'_> {
+pub(crate) fn parse_frontmatter(input: &str) -> FrontmatterParse<'_> {
     if let Some(after_open) = input.strip_prefix("---\n")
         && let Some(raw_body_end) = find_closing_delimiter(after_open)
     {

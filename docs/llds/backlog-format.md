@@ -111,9 +111,11 @@ id: <full-id>
 ```
 
 - The frontmatter `id` field MUST equal the filename stem.
-- The body is the verbatim notes content, with the indentation that the notes had under the bullet stripped (the minimum common leading whitespace across all note lines, after dropping leading/trailing blank lines).
+- The body is the verbatim notes content, with the indentation that the notes had under the bullet stripped (the **longest common leading-whitespace byte prefix** across the non-blank note lines, after dropping leading/trailing blank lines). "Leading whitespace" is the run of space and tab bytes at the start of a line; the shared prefix is compared byte-for-byte, so a tab and a space never match and mixed-indentation notes whose lines disagree on the leading run are left un-stripped. Interior blank lines are preserved and excluded from the prefix computation. See [SYNC-NOTES-004](../specs/sync-specs.md).
 - On re-sync with new notes appended, VAT appends a single blank line to the existing body, then the new notes (with the same indentation-stripping rule applied to the new notes alone).
 - File created lazily — only when there are notes. Deleted on `vat done`.
+- Creating an item file is a *create*, not an upsert: it fails rather than overwrite an existing file (the sync caller routes existing files to the append path instead). Appending is done atomically (stage in a sibling temp file, then rename over the target) so an interrupted append never truncates the accumulated notes — consistent with sync's all-or-nothing write stance ([sync LLD](./sync.md#failure-modes)).
+- CRLF in incoming note text is normalized to LF before the file is written, so item files never carry stray `\r` bytes (FMT-WS-001 applies to the write path, not just reads).
 
 ## `backlog/.used-ids`
 
@@ -162,6 +164,16 @@ A small shared primitive (likely `src/base32.rs`) backs every place an ID or pre
 
 **Where collision-handling lives.** The 100-retry loop on suffix collisions is owned by `vat sync` (see [sync LLD](./sync.md)), not by this module. `random` is dumb — it generates and returns; the caller decides whether the result collides with `.used-ids`.
 
+## File IO and line endings
+
+All file reads and writes flow through a single helper module (`src/file_io.rs`). Commands and parsers never call `std::fs` directly — they go through this module so line-ending policy lives in exactly one place.
+
+**Read path.** The module exposes `read_to_string(path) -> io::Result<String>`. Before returning, it normalizes all line-ending conventions to `\n`: CRLF (`\r\n`) pairs collapse to `\n`, and any remaining bare `\r` (lone or trailing) also becomes `\n`. Parsers downstream may assume LF-only input.
+
+**Write path.** The module exposes `write(path, contents) -> io::Result<()>`, which writes bytes as composed by the caller. Serializers always produce `\n`-terminated strings; the IO layer never injects `\r`. The write-path invariant is enforced by convention in the LLD rather than by a runtime check.
+
+**Surface scope for v1.** Just `read_to_string` and `write`. Atomic-write semantics (tempfile + rename) are out of scope for this module today; tracked separately if they become necessary.
+
 ## Decisions & alternatives
 
 - **First `---` after the frontmatter as the parsed/freeform boundary.** Simpler than a magic comment. Markdown-native. The frontmatter (if present) consumes its own pair of `---` delimiters first, then the next `---` line in the file is the body's boundary. Cost: someone using `---` for a section break inside the parsed region truncates their backlog. Documented as a known restriction.
@@ -173,3 +185,5 @@ A small shared primitive (likely `src/base32.rs`) backs every place an ID or pre
 - **Strict Crockford input (no `I/L/O` folding).** Crockford's decoder hint says lenient decoders should fold `I/L → 1` and `O → 0`. We don't, because the inputs here are short user-typed identifiers where a typo is more likely than intentional use of an ambiguous glyph; a hard error is more helpful than a silent rewrite. Cost: a user who types `Iol` for their prefix gets an error instead of `101`.
 - **Hand-rolled alphabet, no `crockford` crate.** The surface is two functions over a 32-char table; pulling a crate would dwarf the implementation. Cost: we own ~15 lines of alphabet code.
 - **Injected RNG.** `random` takes `&mut impl RngCore` rather than calling `thread_rng()` internally, so collision-retry tests in `vat sync` can drive deterministic sequences. Cost: every caller threads an RNG through; in practice only `vat sync` calls it.
+- **Normalize all line endings on read, not just CRLF.** A file saved with bare-CR line endings (rare, but possible from legacy exports or odd paste sources) would otherwise parse as a single giant line and confuse every downstream parser. Cost: a note body that deliberately contains a `\r` (e.g., terminal output with progress bars) loses fidelity on round-trip. Accepted — the failure mode of leaving bare CR untouched is worse than the rare data-fidelity loss.
+- **Single IO module rather than per-command IO.** Every read goes through one normalization point so no command, parser, or future helper has to remember the rule. Cost: a thin indirection over `std::fs`; trivial.
