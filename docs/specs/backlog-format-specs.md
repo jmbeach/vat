@@ -9,14 +9,14 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **FMT-FM-001** — When `backlog.md` begins with a line consisting solely of `---`, the system shall treat the content up to the next line consisting solely of `---` as YAML frontmatter.
 - [ ] **FMT-FM-002** — When the frontmatter contains a `version` key whose integer value is greater than the CLI's supported major version, the system shall abort the command with an error message naming the file's version and the CLI's supported version, and shall not write to any file.
 - [x] **FMT-FM-003** — When the frontmatter is absent or omits the `version` key, the system shall treat the file as version 1.
-- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim.
+- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim, modulo read-time line-ending normalization (see FMT-WS-001).
 - [ ] **FMT-FM-005** — When `vat init` creates `backlog.md`, the system shall write a frontmatter block containing `version: 1`.
 
 ## Body regions
 
 - [ ] **FMT-RGN-001** — When `backlog.md` contains a line consisting solely of `---` after any frontmatter, the system shall treat content above that line as the parsed region and content from that line onward as the freeform region.
 - [ ] **FMT-RGN-002** — When `backlog.md` contains no `---` separator after any frontmatter, the system shall treat the entire body as the parsed region.
-- [ ] **FMT-RGN-003** — When writing `backlog.md`, the system shall preserve the freeform region byte-for-byte.
+- [ ] **FMT-RGN-003** — When writing `backlog.md`, the system shall preserve the freeform region byte-for-byte, modulo read-time line-ending normalization (see FMT-WS-001).
 - [ ] **FMT-RGN-004** — The system shall not recognize `***` or `___` as a region separator in v1.
 
 ## Parsed region structure
@@ -76,7 +76,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [ ] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml` when `XDG_CONFIG_HOME` is unset.
 - [ ] **FMT-USR-002** — `user.name` shall be optional in the user config file.
 
-## Line endings and whitespace
+## Line endings, whitespace, and IO normalization
 
-- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize CRLF line endings to LF.
+- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF. (Normalization infrastructure landed in `file_io`; marker stays `[ ]` pending caller wiring.)
 - [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.
