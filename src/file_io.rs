@@ -70,10 +70,7 @@ mod tests {
     // @spec FMT-WS-001
     #[test]
     fn normalizes_mixed_crlf_lf_and_bare_cr() {
-        assert_eq!(
-            normalize_line_endings("a\r\nb\nc\rd\r\n"),
-            "a\nb\nc\nd\n"
-        );
+        assert_eq!(normalize_line_endings("a\r\nb\nc\rd\r\n"), "a\nb\nc\nd\n");
     }
 
     // @spec FMT-WS-001
@@ -92,10 +89,7 @@ mod tests {
     // @spec FMT-WS-001
     #[test]
     fn preserves_multibyte_unicode_around_line_endings() {
-        assert_eq!(
-            normalize_line_endings("héllo\r\nwörld\r"),
-            "héllo\nwörld\n"
-        );
+        assert_eq!(normalize_line_endings("héllo\r\nwörld\r"), "héllo\nwörld\n");
     }
 
     // @spec FMT-WS-001
