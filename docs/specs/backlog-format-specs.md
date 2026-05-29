@@ -9,14 +9,14 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **FMT-FM-001** — When `backlog.md` begins with a line consisting solely of `---`, the system shall treat the content up to the next line consisting solely of `---` as YAML frontmatter.
 - [ ] **FMT-FM-002** — When the frontmatter contains a `version` key whose integer value is greater than the CLI's supported major version, the system shall abort the command with an error message naming the file's version and the CLI's supported version, and shall not write to any file.
 - [x] **FMT-FM-003** — When the frontmatter is absent or omits the `version` key, the system shall treat the file as version 1.
-- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim.
+- [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim, modulo read-time line-ending normalization (see FMT-WS-001).
 - [ ] **FMT-FM-005** — When `vat init` creates `backlog.md`, the system shall write a frontmatter block containing `version: 1`.
 
 ## Body regions
 
 - [ ] **FMT-RGN-001** — When `backlog.md` contains a line consisting solely of `---` after any frontmatter, the system shall treat content above that line as the parsed region and content from that line onward as the freeform region.
 - [ ] **FMT-RGN-002** — When `backlog.md` contains no `---` separator after any frontmatter, the system shall treat the entire body as the parsed region.
-- [ ] **FMT-RGN-003** — When writing `backlog.md`, the system shall preserve the freeform region byte-for-byte.
+- [ ] **FMT-RGN-003** — When writing `backlog.md`, the system shall preserve the freeform region byte-for-byte, modulo read-time line-ending normalization (see FMT-WS-001).
 - [ ] **FMT-RGN-004** — The system shall not recognize `***` or `___` as a region separator in v1.
 
 ## Parsed region structure
@@ -55,15 +55,21 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Item files
 
-- [ ] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
-- [ ] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
-- [ ] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
+- [x] **FMT-ITEM-001** — When the system creates an item file at `backlog/items/<id>.md`, it shall write a YAML frontmatter block with `id: <id>` followed by the body content.
+- [x] **FMT-ITEM-002** — When the system appends notes to an existing item file, it shall preserve the existing frontmatter unchanged and append a single blank line followed by the new notes content.
+- [x] **FMT-ITEM-003** — The system shall not validate that an existing item file's frontmatter `id` matches the filename.
 
 ## Tombstone file
 
-- [ ] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
-- [ ] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
-- [ ] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
+- [x] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
+- [x] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-004** — When reading `backlog/.used-ids`, the system shall reject any line that, after trimming surrounding ASCII whitespace, does not match the Crockford `<3>-<3>` ID format, identifying the 1-based line number of the offending content.
+- [x] **FMT-TOMB-005** — When reading `backlog/.used-ids`, the system shall normalize each ID to lowercase before insertion into the returned set.
+- [x] **FMT-TOMB-006** — When appending to `backlog/.used-ids` and the existing file does not end with a `\n` byte, the system shall write a leading `\n` before the appended content.
+- [x] **FMT-TOMB-007** — When appending to `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return a distinct error identifying the missing project directory and shall not create the directory.
+- [x] **FMT-TOMB-008** — When appending IDs to `backlog/.used-ids`, the system shall write each supplied ID as its own line in input order, performing no deduplication against existing contents or within the batch; an empty input shall leave the filesystem unchanged.
+- [x] **FMT-TOMB-009** — When reading `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return the same distinct missing-project-directory error as the writer (FMT-TOMB-007), rather than treating the file as empty. A missing file within an existing `backlog/` remains empty per FMT-TOMB-002.
 
 ## Project config
 
@@ -80,7 +86,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [x] **FMT-USR-005** — When writing the user config file, the system shall preserve unknown sections and keys, including their relative order.
 - [x] **FMT-USR-006** — When the user config file is present and the `[user]` element exists but is not a table (e.g. a bare scalar or an array of tables), the system shall abort with an error and shall not write to any file.
 
-## Line endings and whitespace
+## Line endings, whitespace, and IO normalization
 
-- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize CRLF line endings to LF.
+- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF. (Normalization infrastructure landed in `file_io`; marker stays `[ ]` pending caller wiring.)
 - [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.

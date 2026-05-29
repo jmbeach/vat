@@ -39,7 +39,9 @@
         - Insert the [id] marker at the front of the bullet (before any other markers).
    b. Normalize markers on the bullet line into canonical order with single-space separators.
    c. If the entry has notes:
-        - Strip indentation (min common leading whitespace) and trim leading/trailing blank lines.
+        - Strip indentation (longest common leading-whitespace byte prefix across
+          non-blank lines; tab ≠ space) and trim leading/trailing blank lines.
+          See the [format LLD](./backlog-format.md) and SYNC-NOTES-004.
         - If the result is empty (the notes were only whitespace/blank lines):
             do nothing — do not create an item file, do not append.
         - Else if items/<id>.md does not exist:
@@ -90,7 +92,7 @@ A second run finds nothing to assign, nothing to extract, and nothing to normali
 - **`backlog/items/` does not exist but a write is needed**: created.
 - **No `---` separator in the file**: entire file is the parsed region; sync does not add one.
 - **Paragraph or text between two bullets**: attaches to the prior bullet as notes (per the format LLD); on sync, if the trimmed content is non-empty, it is moved to that bullet's item file. Whitespace-only "notes" between bullets do not create or modify an item file.
-- **CRLF line endings**: normalized to `\n` on read. Output is always `\n`-terminated.
+- **Line endings**: handled by the shared IO layer — see [File IO and line endings](./backlog-format.md#file-io-and-line-endings). Sync has no line-ending policy of its own.
 - **Trailing whitespace on bullet lines**: stripped on serialize.
 - **No-op sync**: if the serialized output is byte-identical to the input, sync skips the write so the git working tree stays clean.
 - **Item file frontmatter**: VAT does not validate that the `id:` field inside an existing `items/<id>.md` matches the filename. The frontmatter is left untouched on append; the filename is the source of truth.
