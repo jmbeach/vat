@@ -49,10 +49,25 @@ impl<'a> BacklogFile<'a> {
     // region is present, the structural `---\n` separator is re-emitted between
     // the parsed region and the byte-for-byte-preserved freeform; when absent,
     // only the frontmatter and parsed region are emitted.
+    //
+    // Pre-condition: when the freeform region is present, `new_parsed` must be
+    // empty or end with `\n`. Otherwise the re-emitted `---\n` separator
+    // butt-joins `new_parsed`'s last line (e.g. `"- task" + "---\n"` →
+    // `"- task---\n"`), which `split_body` would NOT recognize as a separator on
+    // the next read — silently swallowing the freeform region into the parsed
+    // region. Callers that serialize a parsed region always terminate their
+    // bullets with `\n`; the debug assert pins the invariant in tests without
+    // costing anything in release builds.
     pub(crate) fn serialize(&self, new_parsed: &str) -> String {
         let mut out = self.frontmatter.serialize();
         out.push_str(new_parsed);
         if let Some(ff) = self.freeform {
+            debug_assert!(
+                new_parsed.is_empty() || new_parsed.ends_with('\n'),
+                "serialize: new_parsed must be empty or end with '\\n' when the \
+                 freeform region is present, else the re-emitted separator merges \
+                 into the parsed region's last line"
+            );
             out.push_str("---\n");
             out.push_str(ff);
         }
@@ -88,6 +103,12 @@ fn split_body(body: &str) -> (&str, Option<&str>) {
 
 pub(crate) struct Frontmatter {
     present: bool,
+    // Owned (`String`) rather than `&'a str` on purpose: `Frontmatter` is
+    // deliberately decoupled from the input's lifetime so it can be carried
+    // independently of the borrowing `BacklogFile<'a>` (e.g. read once, then
+    // outlive the buffer). The copy is a small contiguous substring; the
+    // asymmetry with `BacklogFile.parsed`/`.freeform` (which do borrow) is
+    // intentional, not an oversight to "fix" into a lifetime parameter.
     raw_body: String,
     parsed: Mapping,
 }
@@ -242,6 +263,37 @@ mod tests {
         let r = parse_frontmatter(input);
         assert!(!r.frontmatter.present());
         assert_eq!(r.body, input);
+    }
+
+    // @spec FMT-FM-001
+    //
+    // Zero-body variant of the above: an empty frontmatter whose closing `---`
+    // lacks a trailing newline. Regression anchor so a future
+    // `find_closing_delimiter` relaxation (e.g. trimming) can't silently start
+    // recognizing `"---\n---"` as a closed frontmatter block.
+    #[test]
+    fn fm_empty_frontmatter_without_trailing_newline_is_not_recognized() {
+        let input = "---\n---";
+        let r = parse_frontmatter(input);
+        assert!(!r.frontmatter.present());
+        assert_eq!(r.body, input);
+    }
+
+    // @spec FMT-FM-001
+    //
+    // The CRLF hazard named in `parse_frontmatter`'s doc comment: a `---\r\n`
+    // opening delimiter does NOT match the exact `---\n` and so parses as
+    // no-frontmatter, which would let a `version: N` Windows-edited file skip
+    // the FMT-FM-002 version check. CRLF normalization (FMT-WS-001) is the
+    // file-reading layer's job; this test pins the un-normalized behavior here.
+    #[test]
+    fn fm_crlf_opening_delimiter_is_not_recognized() {
+        let input = "---\r\nversion: 2\n---\r\n";
+        let r = parse_frontmatter(input);
+        assert!(!r.frontmatter.present());
+        assert_eq!(r.body, input);
+        // Because frontmatter is not detected, the version check never sees the 2.
+        assert_eq!(r.frontmatter.version(), 1);
     }
 
     // @spec FMT-FM-001
