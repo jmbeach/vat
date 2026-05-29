@@ -1,0 +1,39 @@
+# Backlog
+
+This directory is managed by **VAT** (Versioned Addressable Tasks) — a tiny
+command-line tool for capturing a project's backlog as plain markdown, kept
+right next to the code.
+
+## Install
+
+```sh
+cargo install vat
+```
+
+## Files
+
+- `backlog.md` — the flat list of tasks. Jot one-line `-` bullets here as you
+  think of them; `vat sync` later gives each a stable ID.
+- `vat.toml` — project config. Holds the 3-char ID prefix for this repo:
+  `{prefix}`.
+- `.used-ids` — tombstone list of every ID ever issued. Committed so a deleted
+  task's ID is never handed out again. Don't hand-edit.
+- `items/<id>.md` — per-task notes. Created when a task has notes, deleted when
+  the task is marked done.
+- `README.md` — this file. Written once by `vat init`; VAT never reads or
+  rewrites it afterward, so edit or delete it freely.
+
+## Workflow
+
+1. Jot new bullets into `backlog.md`:
+
+   ```
+   - rewrite the cache layer
+       why: the LRU is thrashing on hot keys
+   ```
+
+2. Run `vat sync` to assign each new bullet a stable ID (e.g. `{prefix}-7k2`)
+   and tuck any indented notes into `items/<id>.md`.
+3. Claim a task with `vat start {prefix}-7k2`.
+4. Finish it with `vat done {prefix}-7k2` — the bullet is removed from
+   `backlog.md` and its ID is tombstoned in `.used-ids`.
