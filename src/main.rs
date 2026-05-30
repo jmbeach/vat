@@ -1,6 +1,7 @@
 mod base32;
 mod file_io;
 mod frontmatter;
+mod id_assignment;
 mod item_file;
 mod project_config;
 mod tombstone;

@@ -16,7 +16,6 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
 - [vat-q2e] [blocked-by:vat-r6f] `vat init` command (see ./items/vat-q2e.md)
 - [vat-r6f] README template (baked into binary) (see ./items/vat-r6f.md)
-- [vat-s9g] `vat sync` command — ID assignment (see ./items/vat-s9g.md)
 - [vat-t1h] [blocked-by:vat-n4c] `vat sync` command — notes extraction (see ./items/vat-t1h.md)
 - [vat-v3k] [blocked-by:vat-j3z] `vat sync` command — marker normalization and write (see ./items/vat-v3k.md)
 - [vat-w5m] [blocked-by:vat-j3z] `vat start <id>` command (see ./items/vat-w5m.md)
