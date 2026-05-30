@@ -4,6 +4,7 @@ mod frontmatter;
 mod item_file;
 mod project_config;
 mod tombstone;
+mod user_config;
 
 use clap::{Parser, Subcommand};
 
