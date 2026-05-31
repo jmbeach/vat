@@ -1,4 +1,4 @@
-// @spec FMT-FM-001, FMT-FM-003, FMT-FM-004
+// @spec FMT-FM-001, FMT-FM-002, FMT-FM-003, FMT-FM-004, CMD-CC-001
 
 #![allow(dead_code)]
 
@@ -50,7 +50,7 @@ impl Frontmatter {
     }
 }
 
-// @spec FMT-FM-002
+// @spec FMT-FM-002, CMD-CC-001
 //
 // Cross-cutting gate run at the top of every read-path command, after parsing
 // frontmatter and before any other work. Pure — it never writes; aborting on
@@ -124,7 +124,7 @@ fn parse_yaml_mapping(raw_body: &str) -> Mapping {
 
 #[cfg(test)]
 mod tests {
-    use super::{SUPPORTED_MAJOR, UnsupportedVersion, check_version, parse};
+    use super::{check_version, parse, UnsupportedVersion, SUPPORTED_MAJOR};
 
     // @spec FMT-FM-002
     #[test]
@@ -241,7 +241,6 @@ mod tests {
     }
 
     // @spec FMT-FM-001
-    #[test]
     fn line_starting_with_three_dashes_but_not_solely_is_not_a_closing_delimiter() {
         let input = "---\nversion: 1\n---foo\n---\nbody\n";
         let r = parse(input);
