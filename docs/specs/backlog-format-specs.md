@@ -64,9 +64,15 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Tombstone file
 
-- [ ] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
-- [ ] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
-- [ ] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
+- [x] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
+- [x] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
+- [x] **FMT-TOMB-004** — When reading `backlog/.used-ids`, the system shall reject any line that, after trimming surrounding ASCII whitespace, does not match the Crockford `<3>-<3>` ID format, identifying the 1-based line number of the offending content.
+- [x] **FMT-TOMB-005** — When reading `backlog/.used-ids`, the system shall normalize each ID to lowercase before insertion into the returned set.
+- [x] **FMT-TOMB-006** — When appending to `backlog/.used-ids` and the existing file does not end with a `\n` byte, the system shall write a leading `\n` before the appended content.
+- [x] **FMT-TOMB-007** — When appending to `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return a distinct error identifying the missing project directory and shall not create the directory.
+- [x] **FMT-TOMB-008** — When appending IDs to `backlog/.used-ids`, the system shall write each supplied ID as its own line in input order, performing no deduplication against existing contents or within the batch; an empty input shall leave the filesystem unchanged.
+- [x] **FMT-TOMB-009** — When reading `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return the same distinct missing-project-directory error as the writer (FMT-TOMB-007), rather than treating the file as empty. A missing file within an existing `backlog/` remains empty per FMT-TOMB-002.
 
 ## Project config
 
@@ -76,8 +82,12 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Global config
 
-- [ ] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml` when `XDG_CONFIG_HOME` is unset.
-- [ ] **FMT-USR-002** — `user.name` shall be optional in the user config file.
+- [x] **FMT-USR-001** — User config shall live at `$XDG_CONFIG_HOME/vat/config.toml` when `XDG_CONFIG_HOME` is set, non-empty, and absolute; otherwise at `$HOME/.config/vat/config.toml`.
+- [x] **FMT-USR-002** — `user.name` shall be optional in the user config file; an absent `[user]` table or absent `name` key shall not be an error.
+- [x] **FMT-USR-003** — When the user config file is present and `[user] name` exists but is not a string, the system shall abort with an error and shall not write to any file.
+- [x] **FMT-USR-004** — The system shall reject an empty or whitespace-only string as a value for `user.name` on both read and write.
+- [x] **FMT-USR-005** — When writing the user config file, the system shall preserve unknown sections and keys, including their relative order.
+- [x] **FMT-USR-006** — When the user config file is present and the `[user]` element exists but is not a table (e.g. a bare scalar or an array of tables), the system shall abort with an error and shall not write to any file.
 
 ## Line endings, whitespace, and IO normalization
 

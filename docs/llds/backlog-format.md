@@ -123,6 +123,35 @@ Plain text, newline-delimited, one full ID per line (e.g., `foo-7k2`). Order is 
 
 The file is committed. If missing, VAT treats it as empty and creates it on first write.
 
+**Module surface.** Lives in `src/tombstone.rs` as two free functions over a caller-supplied path:
+
+```rust
+pub(crate) fn read(path: &Path) -> Result<HashSet<String>, TombstoneError>;
+pub(crate) fn append(path: &Path, new_ids: &[&str]) -> Result<(), TombstoneError>;
+```
+
+Callers (`vat sync`, `vat done`) hold the path; tombstone is a dumb file-format module.
+
+**Reader semantics.**
+- Missing file with `backlog/` present → `Ok(empty set)`. The file is only required to exist *for callers that need to write* (sync).
+- Missing parent `backlog/` directory → `Err(NoBacklogDir)`, symmetric with the writer. An uninitialized project fails loudly on read rather than reporting "no used IDs" — the distinction between an absent file (fine) and an absent project dir (a config bug) is preserved.
+- Each line is trimmed of surrounding ASCII whitespace.
+- Trimmed-empty lines and lines that fail the `<3>-<3>` Crockford ID shape produce a hard error naming the 1-based line number. Reader is strict: a malformed tombstone is a config bug and should fail loudly so a human can fix it, not silently mask collisions.
+- Valid IDs are lowercase-normalized before insertion. Hand-edits introducing uppercase don't leak past this layer.
+- Dedup is automatic — return type is a `HashSet<String>`.
+- IDs are stored as opaque `String` post-normalization; tombstone does not interpret the prefix or check it against `vat.toml`. Cross-prefix lines (a leftover from a renamed project) are still well-formed at this layer; sync's own prefix check catches them upstream.
+
+**Writer semantics.**
+- Opens the file with `OpenOptions::new().read(true).create(true).append(true)`; creating it if missing satisfies the "create on first write" half of FMT-TOMB-002. The `.read(true)` flag is required so the seek-and-read-last-byte trailing-newline check below can run — without it `read_exact` returns `EBADF` on every non-empty file.
+- Input validation: before opening the file, each supplied ID is checked against the same `<3>-<3>` Crockford shape the reader enforces, returning `MalformedLine` (with the 1-based position in the batch) on the first failure. The reader is strict, so writing an unvalidated ID — a bare word, or one containing an embedded `\n` — would yield a tombstone the reader then hard-errors on, requiring manual repair. The guard bails before the file is created or touched. This is shape validation only, not deduplication or prefix filtering.
+- Blind append: writes one `<id>\n` line per input element, in input order, with no dedup against existing contents and no prefix filtering. Sync already holds the live set; dedup-on-read makes write-time dedup redundant. The LLD-level "redundant write … kept for safety" line on `vat done` depends on this. An empty input batch is a no-op — the file is neither created nor modified — but the parent-directory check below still runs first.
+- Defensive trailing-newline: before writing, reads the final byte of the existing file (if any) and prepends a `\n` to the write buffer when it isn't already `\n`. A truncated hand-edit can't fuse the next append onto the previous tail. (This guards single-process hand-edits only; see **Concurrency** for the racing-writers case.)
+- Parent-directory `backlog/` must exist. It is checked before the empty-batch shortcut so a zero-ID append can't silently succeed against a missing project. A missing parent is surfaced as a typed `TombstoneError::NoBacklogDir { path }`; a parent that exists but is not a directory (e.g. a regular file named `backlog`) is surfaced as the distinct `TombstoneError::BacklogNotDirectory { path }` so the error names the real problem instead of claiming the directory is absent. Both let callers render a "run `vat init`" message. The writer does not `create_dir_all` — that would let tombstone backdoor project structure that only `vat init` should produce.
+
+**Error type.** `TombstoneError` (thiserror) carries at minimum `MalformedLine { line_no: usize }` (with the trimmed content for diagnostics), `NoBacklogDir { path: PathBuf }`, `BacklogNotDirectory { path: PathBuf }`, and an `Io(io::Error)` wrapper for other I/O failures. Variants exist because reader (malformed lines), writer (missing project dir, or a non-directory in its place), and shared I/O each have a structurally distinguishable failure mode that the rest of the CLI needs to format usefully. `PartialEq` is implemented by hand (comparing `Io` by `ErrorKind`) since `io::Error` is not itself `PartialEq`; this keeps `assert_eq!`-style assertions available to tests, matching `Base32Error` and `ConfigError`.
+
+**Concurrency.** Out of scope for v1. Two CLI processes racing on `.used-ids` could in principle hand out the same ID twice; documented as a non-goal. Adding a file lock is cheap if the scenario ever materializes.
+
 ## `backlog/vat.toml`
 
 ```toml
@@ -140,8 +169,47 @@ id = "foo"   # exactly 3 characters, Crockford base32 alphabet
 name = "jared"
 ```
 
-- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml`.
+- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `$HOME/.config/vat/config.toml`.
 - `user.name` is optional in the file; commands that require it (`vat start`) error with a pointer to `vat config set user.name <name>` if missing.
+
+### Module: `src/user_config.rs`
+
+Mirrors the shape of `src/project_config.rs`: a pure `UserConfig` value with parse/serialize, plus a thin I/O layer in the same file for path resolution, load, and save.
+
+**Pure surface (parse / serialize):**
+
+- `UserConfig::empty() -> UserConfig` — an empty in-memory config (no `[user]` table). Returned by `load` when the file is absent only if the caller maps `NotFound` that way; the loader itself returns the variant.
+- `parse(input: &str) -> Result<UserConfig, UserConfigError>` — parses TOML. A present `[user]` element that is not a table (e.g. a bare scalar `user = "jared"`, or an array-of-tables) is rejected (`UserNotATable`, FMT-USR-006): `toml::Value::get("name")` returns `None` on a non-table, so without this guard a hand-edited scalar would parse cleanly and silently drop the value.
+- `UserConfig::user_name() -> Option<&str>` — `None` when `[user]` is absent or `name` is absent.
+- `UserConfig::set_user_name(&mut self, &str) -> Result<(), UserConfigError>` — refuses empty or whitespace-only strings (see FMT-USR-004).
+- `UserConfig::serialize(&self) -> String` — round-trips unknown sections and keys (same `toml::Value`-backed approach as `project_config.rs`). The `toml` dependency enables the `preserve_order` feature so sections and keys keep their authored order rather than being alphabetized on rewrite.
+
+**I/O surface (path / load / save), in the same module:**
+
+- `config_path() -> Result<PathBuf, UserConfigError>` — resolves the file location:
+  1. If `$XDG_CONFIG_HOME` is set, non-empty, **and absolute**, use `$XDG_CONFIG_HOME/vat/config.toml`.
+  2. Else if `$HOME` is set and non-empty, use `$HOME/.config/vat/config.toml`.
+  3. Else error `UserConfigError::NoHome`.
+- `load(path: &Path) -> Result<UserConfig, UserConfigError>` — reads and parses. If the file is missing, returns `UserConfigError::NotFound(path)` (carrying the resolved path) so callers can distinguish "no config yet" from "parse error" and tell the user where the binary looked. Other `io::Error`s become `UserConfigError::Io`.
+- `save(&self, path: &Path) -> Result<(), UserConfigError>` — creates parent directories with `fs::create_dir_all` (skipping the empty-parent case so a bare filename doesn't trip `create_dir_all("")`, which errors on Windows), then writes the serialized string directly to `path` (`fs::write`). No temp file, no rename. Default file permissions (0644 on POSIX); no special-casing.
+
+**Errors.** `UserConfigError`:
+
+- `Parse(String)` — malformed TOML.
+- `UserNotATable` — `[user]` is present but not a table (FMT-USR-006).
+- `UserNameNotString` — `[user] name` is present but not a string (FMT-USR-003).
+- `UserNameEmpty` — `[user] name` is empty or whitespace-only (FMT-USR-004).
+- `NotFound(PathBuf)` — config file does not exist on `load`; carries the path checked.
+- `NoHome` — neither `$XDG_CONFIG_HOME` (absolute) nor `$HOME` is usable.
+- `Io(io::Error)` — other read/write failures.
+
+`UserConfigError` implements `PartialEq` by hand (comparing `Io` by `ErrorKind`, the rest by value) since `io::Error` is not `PartialEq`; this keeps `assert_eq!`-style assertions available, matching `ConfigError`.
+
+Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); `user_name()` returns `None`. A present-but-non-table `[user]`, however, is an error (FMT-USR-006) rather than being treated as absent.
+
+**Direct write rationale.** User config writes happen via `vat config set user.name <value>` — interactive, infrequent, and trivial in size. `save` writes the serialized string straight to the file with `fs::write`. We do not use a temp-file-and-rename dance: the file is small, the write is a single syscall, and the offline-first model treats git (not the local filesystem) as the durability boundary.
+
+**Strict XDG path resolution rationale.** Empty `XDG_CONFIG_HOME` and relative `XDG_CONFIG_HOME` both fall through to `$HOME/.config` per the XDG Base Directory spec. We do not silently accept a relative `XDG_CONFIG_HOME` — it would produce paths relative to whatever directory `vat` was invoked from, which is almost never the user's intent.
 
 ## ID alphabet & generation
 
