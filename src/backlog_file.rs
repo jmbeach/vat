@@ -1,4 +1,4 @@
-// @spec FMT-FM-001, FMT-FM-003, FMT-FM-004, FMT-RGN-001, FMT-RGN-002, FMT-RGN-003, FMT-RGN-004, FMT-RGN-005, FMT-RGN-006, FMT-RGN-007
+// @spec FMT-FM-001, FMT-FM-003, FMT-FM-004, FMT-RGN-001, FMT-RGN-002, FMT-RGN-003, FMT-RGN-004, FMT-RGN-005, FMT-RGN-006, FMT-RGN-007, FMT-PARSE-001, FMT-PARSE-002, FMT-PARSE-003, FMT-PARSE-004, FMT-PARSE-005
 
 #![allow(dead_code)]
 
@@ -196,9 +196,96 @@ fn parse_yaml_mapping(raw_body: &str) -> Mapping {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Parsed region grammar (FMT-PARSE-001..005)
+// ---------------------------------------------------------------------------
+
+/// A single task entry in the parsed region: a bullet line plus all note lines
+/// that follow it up to the next bullet or end of the parsed region.
+pub(crate) struct TaskEntry<'a> {
+    /// The bullet line, including its trailing `\n` (or without it if the file
+    /// ends without a newline). Always starts with `"- "`.
+    pub(crate) bullet_line: &'a str,
+    /// All lines between this bullet and the next bullet (exclusive), verbatim.
+    /// May be empty when the bullet is immediately followed by another bullet or
+    /// by the end of the parsed region.
+    pub(crate) notes: &'a str,
+}
+
+/// The structured view of a `backlog.md` parsed region: an optional preamble
+/// followed by a sequence of task entries.
+pub(crate) struct ParsedRegion<'a> {
+    /// Content before the first bullet line; preserved verbatim on re-serialize.
+    pub(crate) preamble: &'a str,
+    /// Task entries in document order.
+    pub(crate) entries: Vec<TaskEntry<'a>>,
+}
+
+// @spec FMT-PARSE-001, FMT-PARSE-002
+fn is_bullet_line(line: &str) -> bool {
+    line.starts_with("- ")
+}
+
+impl<'a> ParsedRegion<'a> {
+    // @spec FMT-PARSE-001, FMT-PARSE-002, FMT-PARSE-003, FMT-PARSE-004
+    pub(crate) fn parse(region: &'a str) -> Self {
+        let mut offset = 0usize;
+        for line in region.split_inclusive('\n') {
+            if is_bullet_line(line) {
+                break;
+            }
+            offset += line.len();
+        }
+        // `offset` is the byte start of the first bullet, or `region.len()` if
+        // the loop exhausted all lines without finding one.
+        let preamble = &region[..offset];
+        let entries = parse_task_entries(&region[offset..]);
+        ParsedRegion { preamble, entries }
+    }
+
+    // @spec FMT-PARSE-005
+    pub(crate) fn serialize(&self) -> String {
+        let mut out = String::new();
+        out.push_str(self.preamble);
+        for entry in &self.entries {
+            out.push_str(entry.bullet_line);
+            out.push_str(entry.notes);
+        }
+        out
+    }
+}
+
+fn parse_task_entries(rest: &str) -> Vec<TaskEntry<'_>> {
+    let mut entries: Vec<TaskEntry<'_>> = Vec::new();
+    let mut offset = 0usize;
+    let mut bullet_start: Option<usize> = None;
+    let mut notes_start: Option<usize> = None;
+
+    for line in rest.split_inclusive('\n') {
+        if is_bullet_line(line) {
+            if let (Some(bs), Some(ns)) = (bullet_start, notes_start) {
+                entries.push(TaskEntry {
+                    bullet_line: &rest[bs..ns],
+                    notes: &rest[ns..offset],
+                });
+            }
+            bullet_start = Some(offset);
+            notes_start = Some(offset + line.len());
+        }
+        offset += line.len();
+    }
+    if let (Some(bs), Some(ns)) = (bullet_start, notes_start) {
+        entries.push(TaskEntry {
+            bullet_line: &rest[bs..ns],
+            notes: &rest[ns..],
+        });
+    }
+    entries
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{BacklogFile, parse_frontmatter, split_body};
+    use super::{BacklogFile, ParsedRegion, parse_frontmatter, split_body};
 
     // ===================================================================
     // Frontmatter unit tests (FMT-FM-001, FMT-FM-003, FMT-FM-004)
@@ -680,5 +767,180 @@ mod tests {
         assert_eq!(f.parsed(), "");
         assert_eq!(f.freeform(), None);
         assert_eq!(f.serialize(f.parsed()), "");
+    }
+
+    // ===================================================================
+    // ParsedRegion unit tests (FMT-PARSE-001..005)
+    // ===================================================================
+
+    // @spec FMT-PARSE-004
+    #[test]
+    fn region_empty_input_gives_empty_preamble_and_no_entries() {
+        let r = ParsedRegion::parse("");
+        assert_eq!(r.preamble, "");
+        assert_eq!(r.entries.len(), 0);
+    }
+
+    // @spec FMT-PARSE-004
+    #[test]
+    fn region_no_bullets_whole_region_is_preamble() {
+        let input = "# Backlog\n\nSome preamble text.\n";
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.preamble, input);
+        assert_eq!(r.entries.len(), 0);
+    }
+
+    // @spec FMT-PARSE-001
+    #[test]
+    fn region_single_bullet_no_preamble_no_notes() {
+        let r = ParsedRegion::parse("- task one\n");
+        assert_eq!(r.preamble, "");
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- task one\n");
+        assert_eq!(r.entries[0].notes, "");
+    }
+
+    // @spec FMT-PARSE-001, FMT-PARSE-004
+    #[test]
+    fn region_preamble_then_single_bullet() {
+        let r = ParsedRegion::parse("# Backlog\n\n- task one\n");
+        assert_eq!(r.preamble, "# Backlog\n\n");
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- task one\n");
+        assert_eq!(r.entries[0].notes, "");
+    }
+
+    // @spec FMT-PARSE-003
+    #[test]
+    fn region_bullet_with_indented_note_lines() {
+        let r = ParsedRegion::parse("- task\n  note line\n  another note\n");
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- task\n");
+        assert_eq!(r.entries[0].notes, "  note line\n  another note\n");
+    }
+
+    // @spec FMT-PARSE-003
+    #[test]
+    fn region_blank_line_between_bullets_belongs_to_first_bullet_notes() {
+        let r = ParsedRegion::parse("- first\n\n- second\n");
+        assert_eq!(r.entries.len(), 2);
+        assert_eq!(r.entries[0].bullet_line, "- first\n");
+        assert_eq!(r.entries[0].notes, "\n");
+        assert_eq!(r.entries[1].bullet_line, "- second\n");
+        assert_eq!(r.entries[1].notes, "");
+    }
+
+    // @spec FMT-PARSE-003
+    #[test]
+    fn region_paragraph_at_col0_between_bullets_attaches_to_first() {
+        let r = ParsedRegion::parse("- first\nsome text at col 0\n- second\n");
+        assert_eq!(r.entries.len(), 2);
+        assert_eq!(r.entries[0].notes, "some text at col 0\n");
+        assert_eq!(r.entries[1].notes, "");
+    }
+
+    // @spec FMT-PARSE-002
+    #[test]
+    fn region_star_line_at_start_is_preamble_not_bullet() {
+        let r = ParsedRegion::parse("* not a task\n- real task\n");
+        assert_eq!(r.preamble, "* not a task\n");
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- real task\n");
+    }
+
+    // @spec FMT-PARSE-002
+    #[test]
+    fn region_plus_line_at_start_is_preamble_not_bullet() {
+        let r = ParsedRegion::parse("+ not a task\n- real task\n");
+        assert_eq!(r.preamble, "+ not a task\n");
+        assert_eq!(r.entries.len(), 1);
+    }
+
+    // @spec FMT-PARSE-002
+    #[test]
+    fn region_star_line_after_bullet_is_note_not_new_entry() {
+        let r = ParsedRegion::parse("- task\n* not a bullet\n- second\n");
+        assert_eq!(r.entries.len(), 2);
+        assert_eq!(r.entries[0].notes, "* not a bullet\n");
+    }
+
+    // @spec FMT-PARSE-002
+    #[test]
+    fn region_plus_line_after_bullet_is_note_not_new_entry() {
+        let r = ParsedRegion::parse("- task\n+ not a bullet\n- second\n");
+        assert_eq!(r.entries.len(), 2);
+        assert_eq!(r.entries[0].notes, "+ not a bullet\n");
+    }
+
+    // @spec FMT-PARSE-001
+    #[test]
+    fn region_indented_dash_space_is_not_a_bullet() {
+        let r = ParsedRegion::parse("  - indented bullet\n- real\n");
+        assert_eq!(r.preamble, "  - indented bullet\n");
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- real\n");
+    }
+
+    // @spec FMT-PARSE-001
+    #[test]
+    fn region_bare_hyphen_without_space_is_not_a_bullet() {
+        let r = ParsedRegion::parse("-not a bullet\n- real\n");
+        assert_eq!(r.preamble, "-not a bullet\n");
+        assert_eq!(r.entries.len(), 1);
+    }
+
+    // @spec FMT-PARSE-001
+    #[test]
+    fn region_bullet_without_trailing_newline_round_trips() {
+        let input = "- task without newline";
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.entries.len(), 1);
+        assert_eq!(r.entries[0].bullet_line, "- task without newline");
+        assert_eq!(r.entries[0].notes, "");
+        assert_eq!(r.serialize(), input);
+    }
+
+    // @spec FMT-PARSE-005
+    #[test]
+    fn region_serialize_round_trips_full_document() {
+        let input = "# Backlog\n\nThis is preamble.\n\n- task one\n  note for one\n- task two\n\n";
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.serialize(), input);
+    }
+
+    // @spec FMT-PARSE-005
+    #[test]
+    fn region_serialize_preamble_only_round_trips() {
+        let input = "# Backlog\n\nNo tasks yet.\n";
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.serialize(), input);
+    }
+
+    // @spec FMT-PARSE-005
+    #[test]
+    fn region_serialize_empty_round_trips() {
+        let r = ParsedRegion::parse("");
+        assert_eq!(r.serialize(), "");
+    }
+
+    // @spec FMT-PARSE-001, FMT-PARSE-003, FMT-PARSE-004, FMT-PARSE-005
+    #[test]
+    fn region_real_backlog_round_trips() {
+        let input = concat!(
+            "# VAT implementation backlog\n",
+            "\n",
+            "Tasks to bring VAT from spec to a working binary.\n",
+            "\n",
+            "- [vat-f1w] [in-progress] [by:claude-routine] Task A (see ./items/vat-f1w.md)\n",
+            "- [vat-g5y] [blocked-by:vat-f1w] Task B\n",
+            "- [vat-p7d] Task C\n",
+        );
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.preamble, "# VAT implementation backlog\n\nTasks to bring VAT from spec to a working binary.\n\n");
+        assert_eq!(r.entries.len(), 3);
+        assert_eq!(r.entries[0].bullet_line, "- [vat-f1w] [in-progress] [by:claude-routine] Task A (see ./items/vat-f1w.md)\n");
+        assert_eq!(r.entries[1].bullet_line, "- [vat-g5y] [blocked-by:vat-f1w] Task B\n");
+        assert_eq!(r.entries[2].bullet_line, "- [vat-p7d] Task C\n");
+        assert_eq!(r.serialize(), input);
     }
 }
