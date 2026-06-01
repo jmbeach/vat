@@ -14,10 +14,13 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Body regions
 
-- [ ] **FMT-RGN-001** — When `backlog.md` contains a line consisting solely of `---` after any frontmatter, the system shall treat content above that line as the parsed region and content from that line onward as the freeform region.
-- [ ] **FMT-RGN-002** — When `backlog.md` contains no `---` separator after any frontmatter, the system shall treat the entire body as the parsed region.
-- [ ] **FMT-RGN-003** — When writing `backlog.md`, the system shall preserve the freeform region byte-for-byte, modulo read-time line-ending normalization (see FMT-WS-001).
-- [ ] **FMT-RGN-004** — The system shall not recognize `***` or `___` as a region separator in v1.
+- [x] **FMT-RGN-001** — When `backlog.md` contains a line equal to exactly `---\n` after any frontmatter, the system shall treat content above that line as the parsed region and content after that line as the freeform region.
+- [x] **FMT-RGN-002** — When `backlog.md` contains no `---\n` separator line after any frontmatter, the system shall treat the entire body as the parsed region and the freeform region as absent.
+- [x] **FMT-RGN-003** — When writing `backlog.md` whose freeform region is present, the system shall emit the parsed region, then a single `---\n` separator line, then the freeform region byte-for-byte (modulo read-time line-ending normalization, see FMT-WS-001); when the freeform region is absent, the system shall emit only the parsed region.
+- [x] **FMT-RGN-004** — The system shall not recognize `***` or `___` as a region separator in v1.
+- [x] **FMT-RGN-005** — The system shall recognize only the exact byte sequence `---\n` as a body separator; lines with surrounding whitespace (e.g., `--- \n`, ` ---\n`) shall not be recognized as separators.
+- [x] **FMT-RGN-006** — When the body ends with an unterminated `---` not followed by a newline, the system shall treat the body as having no separator.
+- [x] **FMT-RGN-007** — When the body separator is the first line of the body, the system shall treat the parsed region as an empty string and the freeform region as present.
 
 ## Parsed region structure
 
