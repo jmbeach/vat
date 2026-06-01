@@ -2,7 +2,7 @@
 
 // Functions here are wired into `vat sync` by vat-t1h; until then they are
 // unreferenced from `main`. Matches the module-wide allow used by the sibling
-// `frontmatter` and `project_config` modules.
+// `backlog_file` and `project_config` modules.
 #![allow(dead_code)]
 
 use std::borrow::Cow;
@@ -13,7 +13,7 @@ use std::str::Utf8Error;
 
 use thiserror::Error;
 
-use crate::frontmatter;
+use crate::backlog_file;
 
 #[derive(Debug, Error)]
 pub(crate) enum ItemFileError {
@@ -146,7 +146,7 @@ fn read_split(path: &Path) -> Result<(String, String), ItemFileError> {
     let bytes = fs::read(path).map_err(|e| io_err(path, e))?;
     let raw = std::str::from_utf8(&bytes)?;
     let normalized = normalize_crlf(raw);
-    let parsed = frontmatter::parse(&normalized);
+    let parsed = backlog_file::parse_frontmatter(&normalized);
     if !parsed.frontmatter.present() {
         return Err(ItemFileError::MissingFrontmatter);
     }

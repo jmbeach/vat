@@ -39,14 +39,20 @@ A file without frontmatter is fully supported — frontmatter only becomes manda
 
 ### Body regions
 
-After any frontmatter, the body has two regions separated by the **first** line consisting solely of `---` (optionally surrounded by whitespace). v1 supports only `---` as the separator; the other CommonMark thematic-break forms (`***`, `___`) are not recognized.
+After any frontmatter, the body has two regions separated by the **first** line equal to exactly the byte sequence `---\n`. v1 supports only `---` as the separator; the other CommonMark thematic-break forms (`***`, `___`) are not recognized. Surrounding whitespace is not tolerated — `--- \n`, ` ---\n`, or `---` without a trailing newline do not count.
 
-Note: the closing `---` of frontmatter is consumed as part of the frontmatter block; the body's separator is the *next* `---` line after that.
+Note: the closing `---` of frontmatter is consumed as part of the frontmatter block; the body's separator is the *next* `---\n` line after that.
 
-- **Parsed region**: everything *above* the separator. VAT reads, mutates, and writes only this region.
-- **Freeform region**: everything from the separator onward, including the separator line itself. VAT preserves it byte-for-byte.
+- **Parsed region**: everything *above* the separator line. VAT reads, mutates, and writes only this region.
+- **Freeform region**: everything *after* the separator line (the separator itself is not part of either region). VAT preserves the freeform region byte-for-byte.
+- **Absence**: when no separator exists in the body, the entire body is the parsed region and the freeform region is *absent* (distinct from "present but empty").
 
-If no separator exists, the entire file is the parsed region.
+The separator line is structural, not content. On write, the serializer emits `<parsed><---\n><freeform>` when freeform is present, or just `<parsed>` when freeform is absent. A freeform region that is present-but-empty (separator on the last line, nothing after it) round-trips as `<parsed>---\n`.
+
+Edge cases:
+
+- A separator on the very first body line gives an empty parsed region; the freeform region is present and holds everything after.
+- A trailing `---` at EOF without a newline is not a separator — the file has no freeform region.
 
 ### Parsed region grammar
 
