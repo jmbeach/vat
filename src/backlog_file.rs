@@ -229,7 +229,10 @@ fn parse_yaml_mapping(raw_body: &str) -> Mapping {
 
 #[cfg(test)]
 mod tests {
-    use super::{BacklogFile, check_version, parse_frontmatter, split_body, UnsupportedVersion, SUPPORTED_MAJOR};
+    use super::{
+        BacklogFile, SUPPORTED_MAJOR, UnsupportedVersion, check_version, parse_frontmatter,
+        split_body,
+    };
 
     // ===================================================================
     // Version check tests (FMT-FM-002, FMT-FM-003)
