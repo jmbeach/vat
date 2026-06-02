@@ -936,10 +936,19 @@ mod tests {
             "- [vat-p7d] Task C\n",
         );
         let r = ParsedRegion::parse(input);
-        assert_eq!(r.preamble, "# VAT implementation backlog\n\nTasks to bring VAT from spec to a working binary.\n\n");
+        assert_eq!(
+            r.preamble,
+            "# VAT implementation backlog\n\nTasks to bring VAT from spec to a working binary.\n\n"
+        );
         assert_eq!(r.entries.len(), 3);
-        assert_eq!(r.entries[0].bullet_line, "- [vat-f1w] [in-progress] [by:claude-routine] Task A (see ./items/vat-f1w.md)\n");
-        assert_eq!(r.entries[1].bullet_line, "- [vat-g5y] [blocked-by:vat-f1w] Task B\n");
+        assert_eq!(
+            r.entries[0].bullet_line,
+            "- [vat-f1w] [in-progress] [by:claude-routine] Task A (see ./items/vat-f1w.md)\n"
+        );
+        assert_eq!(
+            r.entries[1].bullet_line,
+            "- [vat-g5y] [blocked-by:vat-f1w] Task B\n"
+        );
         assert_eq!(r.entries[2].bullet_line, "- [vat-p7d] Task C\n");
         assert_eq!(r.serialize(), input);
     }
