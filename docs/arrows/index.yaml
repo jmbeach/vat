@@ -1,0 +1,71 @@
+schema_version: 1
+last_updated: 2026-06-03
+
+# Taxonomy groups segments by domain cluster.
+taxonomy:
+  format:
+    - backlog-format
+  interface:
+    - cli
+  commands:
+    - commands
+    - sync
+
+# The graph of segments.
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-03
+    audited: 2026-06-03
+    audited_sha: 52bbfb58a6f7f999969da68bef55b38bd59fb744
+    blocks:
+      - commands
+      - sync
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Implement FMT-PARSE-001..006 (task-entry parsing) and FMT-MARK-001..007 (marker normalization); wire FMT-WS-001 callers"
+    drift: "FMT-WS-001 implemented in file_io.rs but spec still [ ] pending caller wiring; FMT-PARSE-* and FMT-MARK-* unimplemented (17 active gaps total)"
+
+  cli:
+    status: MAPPED
+    sampled: 2026-06-03
+    audited: 2026-06-03
+    audited_sha: 52bbfb58a6f7f999969da68bef55b38bd59fb744
+    blocks:
+      - commands
+      - sync
+    blockedBy: []
+    detail: cli.md
+    next: "Create docs/specs/cli-specs.md; implement command dispatch in main.rs"
+    drift: "No EARS spec file for CLI shell; all cmd_* functions in main.rs are stubs; no @spec annotations in main.rs"
+
+  commands:
+    status: MAPPED
+    sampled: 2026-06-03
+    audited: 2026-06-03
+    audited_sha: 52bbfb58a6f7f999969da68bef55b38bd59fb744
+    blocks: []
+    blockedBy:
+      - backlog-format
+      - cli
+    detail: commands.md
+    next: "Implement all command bodies (35 CMD-* active gaps); add @spec annotations as each command is implemented"
+    drift: "All 35 CMD-* active specs unimplemented; main.rs cmd_init/cmd_start/cmd_block/cmd_unblock/cmd_done/cmd_config_* are all stubs"
+
+  sync:
+    status: MAPPED
+    sampled: 2026-06-03
+    audited: 2026-06-03
+    audited_sha: 52bbfb58a6f7f999969da68bef55b38bd59fb744
+    blocks: []
+    blockedBy:
+      - backlog-format
+      - cli
+    detail: sync.md
+    next: "Implement vat sync algorithm in cmd_sync() (23 SYNC-* active gaps); SYNC-NOTES-004 logic exists in item_file.rs"
+    drift: "All 23 SYNC-* active specs unimplemented in cmd_sync(); SYNC-NOTES-004 implemented in item_file.rs but spec marker still [ ]"
+
+unmapped:
+  docs:
+    llds: []
+    specs: []
