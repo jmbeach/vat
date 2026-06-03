@@ -6,10 +6,7 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-t4n] [in-progress] [by:jared] Ideate on non-local VAT storage
-- [vat-r2n] [in-progress] [by:jared] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
-- [vat-d6t] [in-progress] [by:jared] Markdown parser: body region split (see ./items/vat-d6t.md)
-- [vat-f1w] [blocked-by:vat-d6t] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
+- [vat-f1w] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
 - [vat-g5y] [blocked-by:vat-f1w] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
 - [vat-j3z] [blocked-by:vat-g5y] Bullet line serializer (canonical order) (see ./items/vat-j3z.md)
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
