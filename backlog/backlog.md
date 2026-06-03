@@ -6,17 +6,17 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
+- [vat-t4n] [in-progress] [by:jared] Ideate on non-local VAT storage
 - [vat-r2n] [in-progress] [by:jared] User config loader (`~/.config/vat/config.toml`) (see ./items/vat-r2n.md)
-- [vat-v4j] [in-progress] [by:jared] Tombstone file read/write (`backlog/.used-ids`) (see ./items/vat-v4j.md)
-- [vat-f1w] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
+- [vat-d6t] [in-progress] [by:jared] Markdown parser: body region split (see ./items/vat-d6t.md)
+- [vat-f1w] [blocked-by:vat-d6t] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
 - [vat-g5y] [blocked-by:vat-f1w] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
 - [vat-j3z] [blocked-by:vat-g5y] Bullet line serializer (canonical order) (see ./items/vat-j3z.md)
-- [vat-n4c] [in-progress] [by:jared] Item file read/write/append (`backlog/items/<id>.md`) (see ./items/vat-n4c.md)
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
 - [vat-q2e] [blocked-by:vat-r6f] `vat init` command (see ./items/vat-q2e.md)
 - [vat-r6f] README template (baked into binary) (see ./items/vat-r6f.md)
 - [vat-s9g] `vat sync` command — ID assignment (see ./items/vat-s9g.md)
-- [vat-t1h] [blocked-by:vat-n4c] `vat sync` command — notes extraction (see ./items/vat-t1h.md)
+- [vat-t1h] `vat sync` command — notes extraction (see ./items/vat-t1h.md)
 - [vat-v3k] [blocked-by:vat-j3z] `vat sync` command — marker normalization and write (see ./items/vat-v3k.md)
 - [vat-w5m] [blocked-by:vat-j3z] `vat start <id>` command (see ./items/vat-w5m.md)
 - [vat-x8n] [blocked-by:vat-j3z] `vat block <id> <blocker-id>` command (see ./items/vat-x8n.md)

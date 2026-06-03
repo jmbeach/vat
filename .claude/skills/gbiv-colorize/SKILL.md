@@ -1,17 +1,17 @@
 ---
 name: gbiv-colorize
-description: Assign ROYGBIV color tags to bullets in `gbiv.md` top-to-bottom, skipping colors already in use. Stops once every color (red, orange, yellow, green, blue, indigo, violet) has at least one bullet. Use when the user says "colorize gbiv", "assign colors", "tag gbiv with ROYGBIV", or asks to fill in color tags on their gbiv list.
+description: Assign ROYGBIV color tags to bullets in `GBIV.md` top-to-bottom, skipping colors already in use. Stops once every color (red, orange, yellow, green, blue, indigo, violet) has at least one bullet. Use when the user says "colorize gbiv", "assign colors", "tag gbiv with ROYGBIV", or asks to fill in color tags on their gbiv list.
 argument-hint: (no args)
 allowed-tools: Read, Write
 ---
 
 # gbiv-colorize skill
 
-Walks the bullets in `gbiv.md` from the top down and prepends a ROYGBIV color tag (`[red]`, `[orange]`, `[yellow]`, `[green]`, `[blue]`, `[indigo]`, `[violet]`) to each currently-untagged bullet, picking colors in ROYGBIV order while skipping any color that's already in use somewhere in the file. Stops as soon as every color has at least one bullet.
+Walks the bullets in `GBIV.md` from the top down and prepends a ROYGBIV color tag (`[red]`, `[orange]`, `[yellow]`, `[green]`, `[blue]`, `[indigo]`, `[violet]`) to each currently-untagged bullet, picking colors in ROYGBIV order while skipping any color that's already in use somewhere in the file. Stops as soon as every color has at least one bullet.
 
 ## Input / output
 
-- `gbiv.md` at the repo root. Read and rewritten in place.
+- `GBIV.md` at the repo root. Read and rewritten in place.
 - Only the **parsed region** (everything above the first standalone `---` line, or the whole file if no separator exists) is touched. Everything from `---` onward is preserved byte-for-byte.
 
 ## Color order
@@ -24,7 +24,7 @@ The bullet's **first bracketed token after `- `**, if it matches one of the 7 RO
 
 ## Procedure
 
-1. Read `gbiv.md`. Missing → abort: `gbiv.md not found at repo root`.
+1. Read `GBIV.md`. Missing → abort: `GBIV.md not found at repo root`.
 2. Split at the first standalone `---` line. Preserve the freeform region (separator and below) byte-for-byte.
 3. Walk the parsed region. For each line that starts with `- ` at column 0, classify it:
    - **Colored**: first bracketed token matches a ROYGBIV color → record that color as taken.
@@ -46,6 +46,6 @@ The bullet's **first bracketed token after `- `**, if it matches one of the 7 RO
 
 ## Files this skill is allowed to touch
 
-- `gbiv.md` — read and write.
+- `GBIV.md` — read and write.
 
 Nothing else. In particular: does not touch `backlog/`, item files, or any VAT-owned file.

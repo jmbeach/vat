@@ -7,7 +7,7 @@ allowed-tools: Bash, Read
 
 # roy skill
 
-`roy` orchestrates Claude Code sessions, one per ROYGBIV color, each running in its own git worktree paired to a bullet in `gbiv.md`. Each color has a tmux pane; `roy` lets you watch and drive those panes from the outside.
+`roy` orchestrates Claude Code sessions, one per ROYGBIV color, each running in its own git worktree paired to a bullet in `GBIV.md`. Each color has a tmux pane; `roy` lets you watch and drive those panes from the outside.
 
 ## Subcommands
 
@@ -46,7 +46,7 @@ The `--bind` flag on `start` is reserved and ignored in v1 — don't pass it.
 ## What this skill does NOT do
 
 - Does not parse or interpret pane contents — `roy get` output is shown as-is.
-- Does not edit `gbiv.md` (use `/gbiv-sync` or `/gbiv-colorize` for that).
+- Does not edit `GBIV.md` (use `/gbiv-sync` or `/gbiv-colorize` for that).
 - Does not manage tmux sessions directly — go through `roy`.
 - Does not invoke `claude` itself inside a worktree — that's the daemon's job.
 

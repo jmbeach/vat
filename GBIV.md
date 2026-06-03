@@ -1,8 +1,7 @@
+- [indigo] [vat-t4n] Ideate on non-local VAT storage
 - [red] [vat-r2n] User config loader (`~/.config/vat/config.toml`) (see backlog/items/vat-r2n.md)
-- [orange] [vat-v4j] Tombstone file read/write (`backlog/.used-ids`) (see backlog/items/vat-v4j.md)
 - [yellow] [vat-d6t] Markdown parser: body region split (see backlog/items/vat-d6t.md)
-- [green] [vat-m8b] Line-ending normalization (see backlog/items/vat-m8b.md)
-- [blue] [vat-n4c] Item file read/write/append (`backlog/items/<id>.md`) (see backlog/items/vat-n4c.md)
+
 ---
 # GBIV.md
 
