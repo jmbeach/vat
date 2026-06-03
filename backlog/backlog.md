@@ -19,7 +19,7 @@ Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly o
 - [vat-x8n] [blocked-by:vat-j3z] `vat block <id> <blocker-id>` command (see ./items/vat-x8n.md)
 - [vat-y2p] [blocked-by:vat-j3z] `vat unblock <id>` command (see ./items/vat-y2p.md)
 - [vat-z4q] [blocked-by:vat-j3z] `vat done <id>` command (see ./items/vat-z4q.md)
-- [vat-b6r] `vat config get/set` commands (see ./items/vat-b6r.md)
+- [vat-b6r] [in-progress] [by:claude-routine] `vat config get/set` commands (see ./items/vat-b6r.md)
 - [vat-c9s] Exit codes wiring (see ./items/vat-c9s.md)
 - [vat-d3t] [blocked-by:vat-v3k] Snapshot / golden-file tests for sync (see ./items/vat-d3t.md)
 - [vat-f7v] [blocked-by:vat-z4q] Snapshot tests for the other commands (see ./items/vat-f7v.md)
