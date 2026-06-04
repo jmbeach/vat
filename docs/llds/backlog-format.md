@@ -39,14 +39,20 @@ A file without frontmatter is fully supported — frontmatter only becomes manda
 
 ### Body regions
 
-After any frontmatter, the body has two regions separated by the **first** line consisting solely of `---` (optionally surrounded by whitespace). v1 supports only `---` as the separator; the other CommonMark thematic-break forms (`***`, `___`) are not recognized.
+After any frontmatter, the body has two regions separated by the **first** line equal to exactly the byte sequence `---\n`. v1 supports only `---` as the separator; the other CommonMark thematic-break forms (`***`, `___`) are not recognized. Surrounding whitespace is not tolerated — `--- \n`, ` ---\n`, or `---` without a trailing newline do not count.
 
-Note: the closing `---` of frontmatter is consumed as part of the frontmatter block; the body's separator is the *next* `---` line after that.
+Note: the closing `---` of frontmatter is consumed as part of the frontmatter block; the body's separator is the *next* `---\n` line after that.
 
-- **Parsed region**: everything *above* the separator. VAT reads, mutates, and writes only this region.
-- **Freeform region**: everything from the separator onward, including the separator line itself. VAT preserves it byte-for-byte.
+- **Parsed region**: everything *above* the separator line. VAT reads, mutates, and writes only this region.
+- **Freeform region**: everything *after* the separator line (the separator itself is not part of either region). VAT preserves the freeform region byte-for-byte.
+- **Absence**: when no separator exists in the body, the entire body is the parsed region and the freeform region is *absent* (distinct from "present but empty").
 
-If no separator exists, the entire file is the parsed region.
+The separator line is structural, not content. On write, the serializer emits `<parsed><---\n><freeform>` when freeform is present, or just `<parsed>` when freeform is absent. A freeform region that is present-but-empty (separator on the last line, nothing after it) round-trips as `<parsed>---\n`.
+
+Edge cases:
+
+- A separator on the very first body line gives an empty parsed region; the freeform region is present and holds everything after.
+- A trailing `---` at EOF without a newline is not a separator — the file has no freeform region.
 
 ### Parsed region grammar
 
@@ -163,8 +169,47 @@ id = "foo"   # exactly 3 characters, Crockford base32 alphabet
 name = "jared"
 ```
 
-- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `~/.config/vat/config.toml`.
+- Path follows XDG: `$XDG_CONFIG_HOME/vat/config.toml`, falling back to `$HOME/.config/vat/config.toml`.
 - `user.name` is optional in the file; commands that require it (`vat start`) error with a pointer to `vat config set user.name <name>` if missing.
+
+### Module: `src/user_config.rs`
+
+Mirrors the shape of `src/project_config.rs`: a pure `UserConfig` value with parse/serialize, plus a thin I/O layer in the same file for path resolution, load, and save.
+
+**Pure surface (parse / serialize):**
+
+- `UserConfig::empty() -> UserConfig` — an empty in-memory config (no `[user]` table). Returned by `load` when the file is absent only if the caller maps `NotFound` that way; the loader itself returns the variant.
+- `parse(input: &str) -> Result<UserConfig, UserConfigError>` — parses TOML. A present `[user]` element that is not a table (e.g. a bare scalar `user = "jared"`, or an array-of-tables) is rejected (`UserNotATable`, FMT-USR-006): `toml::Value::get("name")` returns `None` on a non-table, so without this guard a hand-edited scalar would parse cleanly and silently drop the value.
+- `UserConfig::user_name() -> Option<&str>` — `None` when `[user]` is absent or `name` is absent.
+- `UserConfig::set_user_name(&mut self, &str) -> Result<(), UserConfigError>` — refuses empty or whitespace-only strings (see FMT-USR-004).
+- `UserConfig::serialize(&self) -> String` — round-trips unknown sections and keys (same `toml::Value`-backed approach as `project_config.rs`). The `toml` dependency enables the `preserve_order` feature so sections and keys keep their authored order rather than being alphabetized on rewrite.
+
+**I/O surface (path / load / save), in the same module:**
+
+- `config_path() -> Result<PathBuf, UserConfigError>` — resolves the file location:
+  1. If `$XDG_CONFIG_HOME` is set, non-empty, **and absolute**, use `$XDG_CONFIG_HOME/vat/config.toml`.
+  2. Else if `$HOME` is set and non-empty, use `$HOME/.config/vat/config.toml`.
+  3. Else error `UserConfigError::NoHome`.
+- `load(path: &Path) -> Result<UserConfig, UserConfigError>` — reads and parses. If the file is missing, returns `UserConfigError::NotFound(path)` (carrying the resolved path) so callers can distinguish "no config yet" from "parse error" and tell the user where the binary looked. Other `io::Error`s become `UserConfigError::Io`.
+- `save(&self, path: &Path) -> Result<(), UserConfigError>` — creates parent directories with `fs::create_dir_all` (skipping the empty-parent case so a bare filename doesn't trip `create_dir_all("")`, which errors on Windows), then writes the serialized string directly to `path` (`fs::write`). No temp file, no rename. Default file permissions (0644 on POSIX); no special-casing.
+
+**Errors.** `UserConfigError`:
+
+- `Parse(String)` — malformed TOML.
+- `UserNotATable` — `[user]` is present but not a table (FMT-USR-006).
+- `UserNameNotString` — `[user] name` is present but not a string (FMT-USR-003).
+- `UserNameEmpty` — `[user] name` is empty or whitespace-only (FMT-USR-004).
+- `NotFound(PathBuf)` — config file does not exist on `load`; carries the path checked.
+- `NoHome` — neither `$XDG_CONFIG_HOME` (absolute) nor `$HOME` is usable.
+- `Io(io::Error)` — other read/write failures.
+
+`UserConfigError` implements `PartialEq` by hand (comparing `Io` by `ErrorKind`, the rest by value) since `io::Error` is not `PartialEq`; this keeps `assert_eq!`-style assertions available, matching `ConfigError`.
+
+Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); `user_name()` returns `None`. A present-but-non-table `[user]`, however, is an error (FMT-USR-006) rather than being treated as absent.
+
+**Direct write rationale.** User config writes happen via `vat config set user.name <value>` — interactive, infrequent, and trivial in size. `save` writes the serialized string straight to the file with `fs::write`. We do not use a temp-file-and-rename dance: the file is small, the write is a single syscall, and the offline-first model treats git (not the local filesystem) as the durability boundary.
+
+**Strict XDG path resolution rationale.** Empty `XDG_CONFIG_HOME` and relative `XDG_CONFIG_HOME` both fall through to `$HOME/.config` per the XDG Base Directory spec. We do not silently accept a relative `XDG_CONFIG_HOME` — it would produce paths relative to whatever directory `vat` was invoked from, which is almost never the user's intent.
 
 ## ID alphabet & generation
 
