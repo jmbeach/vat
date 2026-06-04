@@ -24,11 +24,11 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Parsed region structure
 
-- [ ] **FMT-PARSE-001** — The system shall recognize a task entry as a line starting at column 0 with `- ` (hyphen followed by single space).
-- [ ] **FMT-PARSE-002** — The system shall not recognize lines starting with `*` or `+` as task entries.
-- [ ] **FMT-PARSE-003** — The system shall treat any non-bullet line following a bullet, up until the next bullet at column 0 or the end of the parsed region, as notes belonging to that bullet.
-- [ ] **FMT-PARSE-004** — The system shall treat any content in the parsed region appearing before the first bullet line as preamble.
-- [ ] **FMT-PARSE-005** — When writing `backlog.md`, the system shall emit the preamble verbatim at the top of the parsed region.
+- [x] **FMT-PARSE-001** — The system shall recognize a task entry as a line starting at column 0 with `- ` (hyphen followed by single space).
+- [x] **FMT-PARSE-002** — The system shall not recognize lines starting with `*` or `+` as task entries.
+- [x] **FMT-PARSE-003** — The system shall treat any non-bullet line following a bullet, up until the next bullet at column 0 or the end of the parsed region, as notes belonging to that bullet.
+- [x] **FMT-PARSE-004** — The system shall treat any content in the parsed region appearing before the first bullet line as preamble.
+- [x] **FMT-PARSE-005** — When writing `backlog.md`, the system shall emit the preamble verbatim at the top of the parsed region.
 
 ## Crockford base32 utility
 

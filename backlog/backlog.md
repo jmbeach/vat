@@ -6,8 +6,7 @@ version: 1
 
 Tasks to bring VAT from spec to a working `cargo install`-able binary. Roughly ordered bottom-up: format primitives, then commands, then packaging.
 
-- [vat-f1w] Markdown parser: parsed region into preamble + task entries (see ./items/vat-f1w.md)
-- [vat-g5y] [blocked-by:vat-f1w] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
+- [vat-g5y] Bullet line tokenizer (markers + title) (see ./items/vat-g5y.md)
 - [vat-j3z] [blocked-by:vat-g5y] Bullet line serializer (canonical order) (see ./items/vat-j3z.md)
 - [vat-p7d] Version check cross-cutting helper (see ./items/vat-p7d.md)
 - [vat-q2e] `vat init` command (see ./items/vat-q2e.md)
