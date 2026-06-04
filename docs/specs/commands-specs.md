@@ -6,7 +6,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Cross-cutting
 
-- [ ] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
+- [x] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
 - [ ] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
 - [ ] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
 
@@ -17,7 +17,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
 - [ ] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
 - [ ] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
-- [ ] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow.
+- [ ] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow. (Template baked into the binary as `readme_template::BACKLOG_README_TEMPLATE`; marker stays `[ ]` pending `vat init` write wiring per CMD-INIT-005.)
 - [ ] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
 
 ## `vat start <id>`

@@ -4,6 +4,7 @@ mod file_io;
 mod id_assignment;
 mod item_file;
 mod project_config;
+mod readme_template;
 mod tombstone;
 mod user_config;
 
