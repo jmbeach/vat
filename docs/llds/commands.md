@@ -31,7 +31,7 @@ After mutation, the helper serializes the parsed region back through the same em
    ---
    ```
 
-   `backlog/README.md` is written from a static template baked into the binary. It explains:
+   `backlog/README.md` is written from a static template baked into the binary via `include_str!` (`readme_template::BACKLOG_README_TEMPLATE` in `src/readme_template.rs`, sourced from `src/templates/README.md.tmpl`). `readme_template::render(prefix)` substitutes the literal `{prefix}` placeholder with the project prefix; `init` writes the rendered string. It explains:
 
    - What VAT is and where to get it (link to the project repo / install command).
    - The purpose of the `backlog/` directory and a one-line description of each file: `backlog.md`, `vat.toml`, `.used-ids`, `items/`.
