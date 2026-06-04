@@ -1,0 +1,60 @@
+schema_version: 1
+last_updated: 2026-06-04
+
+taxonomy:
+  storage:
+    - backlog-format
+  commands:
+    - sync
+    - commands
+    - cli
+
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-04
+    audited: 2026-06-04
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: [sync, commands]
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Implement FMT-PARSE-001–006 (parsed-region grammar) and FMT-MARK-001–007 (bullet marker parsing/serialization)"
+    drift: "FMT-WS-001 annotated in src/file_io.rs but spec marker is [ ] pending caller wiring; FMT-PARSE and FMT-MARK groups have no code"
+
+  sync:
+    status: PARTIAL
+    sampled: 2026-06-04
+    audited: 2026-06-04
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: sync.md
+    next: "Wire cmd_sync() in src/main.rs — all 23 SYNC-* active specs are gaps"
+    drift: "SYNC-NOTES-004 strip algorithm exists in src/item_file.rs but spec is [ ]; cmd_sync() is an unimplemented stub"
+
+  commands:
+    status: PARTIAL
+    sampled: 2026-06-04
+    audited: 2026-06-04
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: commands.md
+    next: "Wire all command stubs in src/main.rs — 34 active CMD-* gaps across init, start, block, unblock, done, config"
+    drift: "CMD-INIT-006 template implemented in src/readme_template.rs but spec is [ ]; all cmd_* handlers in main.rs are stubs"
+
+  cli:
+    status: MAPPED
+    sampled: 2026-06-04
+    audited: 2026-06-04
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: []
+    blockedBy: []
+    detail: cli.md
+    next: "Create cli-specs.md covering exit codes (CMD-EXIT-*) and error-rendering conventions; annotate src/main.rs with @spec"
+    drift: null
+
+unmapped:
+  docs:
+    llds: []
+    specs: []
