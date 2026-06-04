@@ -89,6 +89,9 @@ impl ProjectConfig {
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(ConfigError::Io)?;
+        }
         std::fs::write(path, self.serialize()).map_err(ConfigError::Io)
     }
 }

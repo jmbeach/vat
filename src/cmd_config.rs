@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 
+use crate::backlog_file::BacklogFile;
 use crate::file_io;
 use crate::project_config::{self, ConfigError};
 use crate::tombstone;
@@ -65,12 +66,17 @@ fn set_impl(
         }
         "project.id" => {
             let vat_toml = backlog_dir.join("vat.toml");
+            // Deliberate: project config requires `vat init` first; unlike user.name
+            // we do not auto-create vat.toml here.
             let mut cfg = project_config::load(&vat_toml).context("reading vat.toml")?;
             let old_prefix = cfg.project_id().to_owned();
-            // CMD-CFG-005: refuse if the old prefix already has IDs in use;
-            // changing it would orphan every existing ID. Skip the guard when
-            // the normalised new value equals the old one (idempotent set).
-            if old_prefix != value.to_ascii_lowercase()
+            // Normalize once; reused for both the idempotency check and the update,
+            // so normalization stays in sync if the rule ever changes.
+            let new_prefix = value.to_ascii_lowercase();
+            // CMD-CFG-005: refuse prefix change when existing IDs would be orphaned.
+            // Idempotent sets bypass the existence check so a malformed .used-ids
+            // cannot block a no-op.
+            if old_prefix != new_prefix
                 && ids_exist_with_prefix(&old_prefix, backlog_dir)
                     .context("checking for existing IDs")?
             {
@@ -79,7 +85,8 @@ fn set_impl(
                      edit vat.toml directly if you need to rename the project prefix"
                 );
             }
-            cfg.set_project_id(value).context("invalid project.id")?;
+            cfg.set_project_id(&new_prefix)
+                .context("invalid project.id")?;
             cfg.save(&vat_toml).context("saving vat.toml")?;
             Ok(())
         }
@@ -100,9 +107,10 @@ fn ids_exist_with_prefix(prefix: &str, backlog_dir: &Path) -> anyhow::Result<boo
     let backlog_path = backlog_dir.join("backlog.md");
     match file_io::read_to_string(&backlog_path) {
         Ok(content) => {
-            // IDs always appear as `[<prefix>-<suffix>]` on bullet lines.
+            // Search only the parsed region; freeform-section references (below the
+            // `---` separator) must not block a prefix rename.
             let needle = format!("[{prefix}-");
-            Ok(content.contains(&needle))
+            Ok(BacklogFile::parse(&content).parsed().contains(&needle))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(e) => Err(e.into()),
@@ -444,5 +452,19 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let backlog = make_backlog_dir(&dir);
         assert!(!ids_exist_with_prefix("bar", &backlog).unwrap());
+    }
+
+    #[test]
+    fn ids_exist_does_not_match_freeform_section() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        // A reference in the freeform section (below ---) must not count as an
+        // active task ID; only the parsed region is scanned.
+        write_backlog_md(
+            &backlog,
+            "- [baz-xyz] Unrelated task\n---\nSee also [bar-abc] for context\n",
+        );
+        assert!(!ids_exist_with_prefix("bar", &backlog).unwrap());
+        assert!(ids_exist_with_prefix("baz", &backlog).unwrap());
     }
 }
