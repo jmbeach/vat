@@ -93,7 +93,10 @@ mod tests {
     fn init_uses_supplied_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let msg = init(dir.path(), "vat").unwrap();
-        assert!(msg.contains("vat"), "success message should name the prefix");
+        assert!(
+            msg.contains("vat"),
+            "success message should name the prefix"
+        );
     }
 
     // @spec CMD-INIT-004
