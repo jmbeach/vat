@@ -4,7 +4,7 @@ Single-entry and config commands: `vat init`, `vat start`, `vat block`, `vat unb
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-04 (git SHA `426964053f024c0e1380a365543da31798536bb7`). One spec implemented (CMD-CC-001, the version-check guard in backlog_file.rs). All command handlers in src/main.rs are unimplemented stubs. README template for `vat init` is ready in src/readme_template.rs but not yet wired.
+**PARTIAL** — last audited 2026-06-04 (git SHA `426964053f024c0e1380a365543da31798536bb7`). No command specs fully implemented; all command handlers in src/main.rs are unimplemented stubs. Two forward drifts: `check_version()` (CMD-CC-001) and README template (CMD-INIT-006) exist in code but are not yet wired into any handler.
 
 ## References
 
@@ -15,7 +15,7 @@ Single-entry and config commands: `vat init`, `vat start`, `vat block`, `vat unb
 - docs/llds/commands.md
 
 ### EARS
-- docs/specs/commands-specs.md (39 specs: 1 implemented, 34 gaps, 4 deferred)
+- docs/specs/commands-specs.md (39 specs: 0 implemented, 35 gaps, 4 deferred)
 
 ### Tests
 - src/readme_template.rs (inline `#[cfg(test)]` — CMD-INIT-006)
@@ -40,7 +40,7 @@ Single-entry and config commands: `vat init`, `vat start`, `vat block`, `vat unb
 
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
-| Cross-cutting | CMD-CC-001 to CMD-CC-003 | 1 | 0 | 2 |
+| Cross-cutting | CMD-CC-001 to CMD-CC-003 | 0 | 0 | 3 |
 | vat init | CMD-INIT-001 to CMD-INIT-007 | 0 | 0 | 7 |
 | vat start | CMD-START-001 to CMD-START-003 | 0 | 0 | 3 |
 | vat block | CMD-BLOCK-001 to CMD-BLOCK-006 | 0 | 0 | 6 |
@@ -53,13 +53,13 @@ Single-entry and config commands: `vat init`, `vat start`, `vat block`, `vat unb
 | Dry-run (deferred) | CMD-DRYRUN-001 | 0 | 1 | 0 |
 | Init adopt (deferred) | CMD-INIT-ADOPT-001 | 0 | 1 | 0 |
 
-**Summary:** 1 of 35 active specs implemented; 4 deferred; 34 gaps.
+**Summary:** 0 of 35 active specs implemented; 4 deferred; 35 gaps.
 
 ## Key Findings
 
 1. **All command handlers are stubs** — src/main.rs:92–130 contains eight functions that each `eprintln!("...: not yet implemented")` and `std::process::exit(1)`. No command logic exists.
 2. **CMD-INIT-006 drift** — `src/readme_template.rs` fully implements the README template for `vat init`, annotated `@spec CMD-INIT-006`, but the spec is `[ ]`. The template code is ready; it becomes active once cmd_init() is wired.
-3. **CMD-CC-001 implemented** — `check_version()` in `src/backlog_file.rs:158` is annotated `@spec FMT-FM-002, CMD-CC-001` and enforces the version-check guard. This is the one implemented spec; the wiring in cmd_* handlers will call it when handlers are written.
+3. **CMD-CC-001 forward drift** — `check_version()` in `src/backlog_file.rs:158` is annotated `@spec FMT-FM-002, CMD-CC-001` and enforces the version-check guard. The function exists but no command handler calls it yet (all are stubs); the spec stays `[ ]` until at least one real handler calls `check_version()`. Analogous to CMD-INIT-006 drift.
 4. **find_entry() helper not yet written** — The shared `find_entry(id)` helper described in the LLD (commands.md §Common machinery) has no implementation. Implementing it is a prerequisite for start, block, unblock, and done.
 5. **Hard blocker** — FMT-PARSE and FMT-MARK gaps in `backlog-format` must be resolved before any bullet-mutating command can work. The `blockedBy: [backlog-format]` dependency applies.
 
@@ -73,4 +73,4 @@ Single-entry and config commands: `vat init`, `vat start`, `vat block`, `vat unb
 
 ### Should Fix
 5. Update CMD-INIT-006 spec marker to `[x]` when cmd_init() is wired
-6. Update CMD-CC-001 coverage note: the spec is `[x]` but only the check function exists; it needs to be called in each handler
+6. Update CMD-CC-001 spec marker to `[x]` when at least one real handler calls `check_version()`

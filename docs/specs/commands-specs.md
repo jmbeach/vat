@@ -6,7 +6,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Cross-cutting
 
-- [x] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
+- [ ] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does. (`check_version()` in `backlog_file.rs:158` is annotated and ready; marker stays `[ ]` pending wiring into each command handler.)
 - [ ] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
 - [ ] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
 
