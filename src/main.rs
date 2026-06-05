@@ -1,11 +1,14 @@
 mod backlog_file;
 mod base32;
+mod cmd_init;
 mod file_io;
 mod item_file;
 mod project_config;
 mod readme_template;
 mod tombstone;
 mod user_config;
+
+use std::io::{self, Write as _};
 
 use clap::{Parser, Subcommand};
 
@@ -89,9 +92,24 @@ fn main() {
     }
 }
 
-fn cmd_init(_prefix: Option<String>) {
-    eprintln!("vat init: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-INIT-002, CMD-INIT-003
+fn cmd_init(prefix: Option<String>) {
+    let prefix_str = prefix.unwrap_or_else(prompt_for_prefix);
+    match cmd_init::init(std::path::Path::new("."), &prefix_str) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn prompt_for_prefix() -> String {
+    print!("Project prefix (3 Crockford base32 chars): ");
+    io::stdout().flush().ok();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap_or_default();
+    input.trim().to_string()
 }
 
 fn cmd_sync() {
