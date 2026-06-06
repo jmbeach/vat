@@ -1,0 +1,64 @@
+schema_version: 1
+last_updated: 2026-06-06
+
+# Taxonomy groups segments by domain cluster.
+taxonomy:
+  format:
+    - backlog-format
+  shell:
+    - cli
+  command_impl:
+    - commands
+    - sync
+
+# The graph of segments.
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-06
+    audited: 2026-06-06
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: [commands, sync]
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Wire FMT-WS-001 callers; implement parsed-region grammar (FMT-PARSE-*) and bullet marker parsing (FMT-MARK-*)"
+    drift: null
+
+  cli:
+    status: PARTIAL
+    sampled: 2026-06-06
+    audited: 2026-06-06
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: [commands, sync]
+    blockedBy: []
+    detail: cli.md
+    next: "Decide whether to create cli-specs.md for EARS coverage of CLI-shell behaviors"
+    drift: "LLD has no corresponding EARS spec file; all command implementations in main.rs are stubs"
+
+  commands:
+    status: PARTIAL
+    sampled: 2026-06-06
+    audited: 2026-06-06
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: []
+    blockedBy: [backlog-format, cli]
+    detail: commands.md
+    next: "Implement all command stubs in main.rs (CMD-INIT-*, CMD-START-*, CMD-BLOCK-*, CMD-UNBLOCK-*, CMD-DONE-*, CMD-CFG-*)"
+    drift: "34 of 35 active specs are gaps; all commands exit(1) with 'not yet implemented'"
+
+  sync:
+    status: PARTIAL
+    sampled: 2026-06-06
+    audited: 2026-06-06
+    audited_sha: 426964053f024c0e1380a365543da31798536bb7
+    blocks: []
+    blockedBy: [backlog-format, cli]
+    detail: sync.md
+    next: "Implement vat sync algorithm in main.rs — all 23 active specs are gaps"
+    drift: "All 23 active specs are gaps; vat sync is a stub that exits(1)"
+
+# Items found during mapping that don't yet belong to a segment.
+unmapped:
+  docs:
+    llds: []
+    specs: []
