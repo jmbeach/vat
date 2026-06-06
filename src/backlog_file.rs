@@ -289,23 +289,24 @@ impl<'a> ParsedRegion<'a> {
 fn parse_task_entries(rest: &str) -> Vec<TaskEntry<'_>> {
     let mut entries: Vec<TaskEntry<'_>> = Vec::new();
     let mut offset = 0usize;
-    let mut bullet_start: Option<usize> = None;
-    let mut notes_start: Option<usize> = None;
+    // `(bullet_start, notes_start)` for the entry currently being accumulated.
+    // The two offsets are always set and cleared together, so a single Option
+    // over the pair makes that invariant explicit.
+    let mut in_flight: Option<(usize, usize)> = None;
 
     for line in rest.split_inclusive('\n') {
         if is_bullet_line(line) {
-            if let (Some(bs), Some(ns)) = (bullet_start, notes_start) {
+            if let Some((bs, ns)) = in_flight {
                 entries.push(TaskEntry {
                     bullet_line: &rest[bs..ns],
                     notes: &rest[ns..offset],
                 });
             }
-            bullet_start = Some(offset);
-            notes_start = Some(offset + line.len());
+            in_flight = Some((offset, offset + line.len()));
         }
         offset += line.len();
     }
-    if let (Some(bs), Some(ns)) = (bullet_start, notes_start) {
+    if let Some((bs, ns)) = in_flight {
         entries.push(TaskEntry {
             bullet_line: &rest[bs..ns],
             notes: &rest[ns..],
@@ -1004,6 +1005,21 @@ mod tests {
         assert_eq!(r.entries.len(), 1);
         assert_eq!(r.entries[0].bullet_line, "- task without newline");
         assert_eq!(r.entries[0].notes, "");
+        assert_eq!(r.serialize(), input);
+    }
+
+    // @spec FMT-PARSE-001
+    #[test]
+    fn region_multi_bullet_last_without_trailing_newline_round_trips() {
+        // Only the final entry lacks a trailing newline; the earlier entry must
+        // still flush correctly and the last entry's notes must be empty.
+        let input = "- a\n- b";
+        let r = ParsedRegion::parse(input);
+        assert_eq!(r.entries.len(), 2);
+        assert_eq!(r.entries[0].bullet_line, "- a\n");
+        assert_eq!(r.entries[0].notes, "");
+        assert_eq!(r.entries[1].bullet_line, "- b");
+        assert_eq!(r.entries[1].notes, "");
         assert_eq!(r.serialize(), input);
     }
 
