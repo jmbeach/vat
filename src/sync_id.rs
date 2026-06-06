@@ -20,9 +20,7 @@ pub(crate) enum SyncIdError {
         line2: usize,
     },
     // @spec SYNC-ID-003
-    #[error(
-        "id generation exhausted {MAX_RETRIES} retries; project namespace may be full"
-    )]
+    #[error("id generation exhausted {MAX_RETRIES} retries; project namespace may be full")]
     RetryExhausted,
 }
 
@@ -87,7 +85,7 @@ pub(crate) fn assign_ids(
         id_to_line.insert(id_lower.clone(), line_no);
 
         // SYNC-ID-005: foreign prefix → warn, leave unchanged (handled in pass 2).
-        let prefix = id_lower.split_once('-').map(|(p, _)| p).unwrap_or("");
+        let prefix = id_lower.split_once('-').map_or("", |(p, _)| p);
         if prefix != project_id {
             warnings.push(format!(
                 "line {line_no}: id [{id_lower}] has foreign prefix \
@@ -270,7 +268,10 @@ mod tests {
         let region = "- my task\n";
         let result = assign_ids(region, "vat", &no_ids(), &mut seeded()).unwrap();
         let line = result.modified.lines().next().unwrap_or("");
-        assert!(line.starts_with("- [vat-"), "id should use project prefix: {line:?}");
+        assert!(
+            line.starts_with("- [vat-"),
+            "id should use project prefix: {line:?}"
+        );
     }
 
     // @spec SYNC-ID-001
@@ -311,7 +312,10 @@ mod tests {
     fn empty_bullet_is_skipped_and_preserved() {
         let region = "- \n";
         let result = assign_ids(region, "vat", &no_ids(), &mut seeded()).unwrap();
-        assert_eq!(result.modified, region, "empty bullet must be left untouched");
+        assert_eq!(
+            result.modified, region,
+            "empty bullet must be left untouched"
+        );
         assert!(result.new_ids.is_empty());
     }
 
@@ -322,7 +326,10 @@ mod tests {
         let region = "- [vat-abc] already has an id\n- needs an id\n";
         let result = assign_ids(region, "vat", &no_ids(), &mut seeded()).unwrap();
         let lines: Vec<&str> = result.modified.lines().collect();
-        assert_eq!(lines[0], "- [vat-abc] already has an id", "existing ID unchanged");
+        assert_eq!(
+            lines[0], "- [vat-abc] already has an id",
+            "existing ID unchanged"
+        );
         assert!(lines[1].starts_with("- [vat-"), "second bullet gets an ID");
         assert_eq!(result.new_ids.len(), 1, "only one new ID assigned");
     }
@@ -456,7 +463,10 @@ mod tests {
         // "bar-abc": "bar" and "abc" are both valid Crockford (b, a, r, c all in alphabet).
         let region = "- [bar-abc] a bullet from another project\n";
         let result = assign_ids(region, "vat", &no_ids(), &mut seeded()).unwrap();
-        assert_eq!(result.modified, region, "foreign-prefix bullet must be unchanged");
+        assert_eq!(
+            result.modified, region,
+            "foreign-prefix bullet must be unchanged"
+        );
         assert!(!result.warnings.is_empty(), "a warning must be emitted");
         assert!(
             result.warnings[0].contains("bar"),
@@ -530,7 +540,7 @@ mod tests {
                 assert_eq!(line1, 2);
                 assert_eq!(line2, 3);
             }
-            _ => panic!("expected DuplicateId, got {err:?}"),
+            SyncIdError::RetryExhausted => panic!("expected DuplicateId, got {err:?}"),
         }
     }
 
@@ -555,7 +565,7 @@ mod tests {
             SyncIdError::DuplicateId { id, .. } => {
                 assert_eq!(id, "vat-abc", "id in error must be lowercase-normalised");
             }
-            _ => panic!("expected DuplicateId"),
+            SyncIdError::RetryExhausted => panic!("expected DuplicateId"),
         }
     }
 
@@ -565,6 +575,9 @@ mod tests {
         // All IDs use valid Crockford segments: abc, def, ghj are each 3 valid chars.
         let region = "- [vat-abc] first\n- [vat-def] second\n- [vat-ghj] third\n";
         let result = assign_ids(region, "vat", &no_ids(), &mut seeded()).unwrap();
-        assert_eq!(result.modified, region, "no-dup region must pass through unchanged");
+        assert_eq!(
+            result.modified, region,
+            "no-dup region must pass through unchanged"
+        );
     }
 }
