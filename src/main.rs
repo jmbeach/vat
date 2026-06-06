@@ -125,7 +125,7 @@ fn cmd_config_get(key: &str) {
     let backlog_dir = std::path::Path::new("backlog");
     match cmd_config::get(key, backlog_dir) {
         Ok(Some(value)) => println!("{value}"),
-        Ok(None) => std::process::exit(1),
+        Ok(None) => {}
         Err(e) => {
             eprintln!("error: {e:#}");
             std::process::exit(1);
