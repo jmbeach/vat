@@ -65,20 +65,20 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<(), SyncError> {
             // SYNC-NOTES-004: strip common leading whitespace and trim blank edges.
             let stripped = item_file::strip_notes(&notes);
 
-            if !stripped.is_empty() {
-                if let Some(ref id) = id {
-                    let item_path = items_dir.join(format!("{id}.md"));
-                    if item_path.exists() {
-                        // SYNC-NOTES-003: append to existing item file.
-                        item_file::append_notes(&item_path, &notes)?;
-                    } else {
-                        // SYNC-NOTES-002: create new item file.
-                        // `write_new` calls `create_dir_all` → satisfies SYNC-WRITE-004.
-                        item_file::write_new(&item_path, id, &notes)?;
-                    }
+            if !stripped.is_empty()
+                && let Some(ref id) = id
+            {
+                let item_path = items_dir.join(format!("{id}.md"));
+                if item_path.exists() {
+                    // SYNC-NOTES-003: append to existing item file.
+                    item_file::append_notes(&item_path, &notes)?;
+                } else {
+                    // SYNC-NOTES-002: create new item file.
+                    // `write_new` calls `create_dir_all` → satisfies SYNC-WRITE-004.
+                    item_file::write_new(&item_path, id, &notes)?;
                 }
-                // No ID on this bullet: notes are still cleared below (see SYNC-NOTES-001).
             }
+            // No ID on this bullet: notes are still cleared below (see SYNC-NOTES-001).
         }
 
         // SYNC-NOTES-001, SYNC-NOTES-005: always clear notes from this entry.
@@ -114,10 +114,11 @@ fn extract_id(bullet_line: &str) -> Option<&str> {
         let close = s.find(']')?;
         let candidate = &s[..close];
         s = &s[close + 1..];
-        if let Some((prefix, suffix)) = candidate.split_once('-') {
-            if base32::validate(prefix, 3).is_ok() && base32::validate(suffix, 3).is_ok() {
-                return Some(candidate);
-            }
+        if let Some((prefix, suffix)) = candidate.split_once('-')
+            && base32::validate(prefix, 3).is_ok()
+            && base32::validate(suffix, 3).is_ok()
+        {
+            return Some(candidate);
         }
     }
 }
@@ -150,7 +151,10 @@ mod tests {
 
     #[test]
     fn extract_id_finds_first_valid_id_marker() {
-        assert_eq!(extract_id("- [vat-t1h] [agent-ready] Title"), Some("vat-t1h"));
+        assert_eq!(
+            extract_id("- [vat-t1h] [agent-ready] Title"),
+            Some("vat-t1h")
+        );
     }
 
     #[test]
@@ -175,10 +179,7 @@ mod tests {
     #[test]
     fn extract_id_does_not_match_blocked_by_marker() {
         // [blocked-by:vat-f1w] contains a dash but does not split into two 3-char base32 parts.
-        assert_eq!(
-            extract_id("- [blocked-by:vat-f1w] Title"),
-            None
-        );
+        assert_eq!(extract_id("- [blocked-by:vat-f1w] Title"), None);
     }
 
     #[test]
@@ -224,10 +225,7 @@ mod tests {
     #[test]
     fn run_removes_note_lines_from_backlog() {
         let dir = setup();
-        write_backlog(
-            &dir,
-            "- [vat-t1h] Title\n  note line\n",
-        );
+        write_backlog(&dir, "- [vat-t1h] Title\n  note line\n");
         run(dir.path()).unwrap();
         let out = read_backlog(&dir);
         assert_eq!(out, "- [vat-t1h] Title\n");
@@ -258,8 +256,14 @@ mod tests {
         let item_path = dir.path().join("items").join("vat-t1h.md");
         assert!(item_path.exists(), "item file should have been created");
         let contents = fs::read_to_string(&item_path).unwrap();
-        assert!(contents.contains("My note."), "item file should contain the note");
-        assert!(contents.starts_with("---\nid: vat-t1h\n---\n"), "item file needs frontmatter");
+        assert!(
+            contents.contains("My note."),
+            "item file should contain the note"
+        );
+        assert!(
+            contents.starts_with("---\nid: vat-t1h\n---\n"),
+            "item file needs frontmatter"
+        );
     }
 
     // @spec SYNC-NOTES-002
@@ -294,12 +298,18 @@ mod tests {
         run(dir.path()).unwrap();
 
         let contents = fs::read_to_string(&item_path).unwrap();
-        assert!(contents.contains("Existing note."), "original note preserved");
+        assert!(
+            contents.contains("Existing note."),
+            "original note preserved"
+        );
         assert!(contents.contains("New note."), "new note appended");
         // New content comes after existing content.
         let existing_pos = contents.find("Existing note.").unwrap();
         let new_pos = contents.find("New note.").unwrap();
-        assert!(new_pos > existing_pos, "new note should come after existing note");
+        assert!(
+            new_pos > existing_pos,
+            "new note should come after existing note"
+        );
     }
 
     // ── SYNC-NOTES-004 ───────────────────────────────────────────────────────
@@ -313,7 +323,10 @@ mod tests {
         let contents = fs::read_to_string(dir.path().join("items").join("vat-t1h.md")).unwrap();
         // The two leading spaces are the common indent and should be stripped.
         assert!(contents.contains("indented note"), "stripped note in file");
-        assert!(!contents.contains("  indented note"), "leading spaces stripped");
+        assert!(
+            !contents.contains("  indented note"),
+            "leading spaces stripped"
+        );
     }
 
     // ── SYNC-NOTES-005 ───────────────────────────────────────────────────────
@@ -380,7 +393,10 @@ mod tests {
         // Ensure items/ does NOT exist before the run.
         assert!(!dir.path().join("items").exists());
         run(dir.path()).unwrap();
-        assert!(dir.path().join("items").exists(), "items/ dir should be created");
+        assert!(
+            dir.path().join("items").exists(),
+            "items/ dir should be created"
+        );
     }
 
     // ── Bullet without ID ─────────────────────────────────────────────────────
