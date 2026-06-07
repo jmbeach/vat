@@ -55,12 +55,34 @@ pub(crate) fn assign_ids(
         }
     }
 
+    // SYNC-ID-002 (region clause): a generated candidate must not collide with an ID
+    // "currently present on another bullet in the parsed region." That clause is enforced
+    // here solely via the `used` set: the caller must pre-seed `used` with every existing
+    // parsed-region ID (and all tombstones). This debug_assert documents and, in debug
+    // builds, enforces that contract so a caller that forgets to seed an existing bullet's
+    // ID fails loudly here rather than silently minting a colliding ID. A covering
+    // integration test belongs with the full `vat sync` wiring (SYNC-ID-004) once it lands.
+    debug_assert!(
+        entry_ids
+            .iter()
+            .filter_map(|slot| slot.as_deref())
+            .all(|id| used.contains(id)),
+        "caller must seed `used` with all existing entry IDs before calling assign_ids \
+         (SYNC-ID-002 region clause)"
+    );
+
     let mut new_ids: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
     for slot in entry_ids.iter_mut() {
         if let Some(existing_id) = slot {
             // SYNC-ID-005: warn when the existing ID's prefix doesn't match.
+            // `split('-').next()` yields the whole string for a dash-less or otherwise
+            // malformed id (e.g. "abcdef" or ""), so such ids deliberately fall into this
+            // same foreign-prefix branch: they are warned about and passed through
+            // unchanged rather than treated as a hard error. This matches the LLD's
+            // "warn, but pass through" intent for non-matching prefixes; we intentionally
+            // do not distinguish a structurally-malformed id from a foreign-project id.
             let prefix = existing_id.split('-').next().unwrap_or("");
             if prefix != project_id {
                 warnings.push(format!(
