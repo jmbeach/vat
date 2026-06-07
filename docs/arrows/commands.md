@@ -55,7 +55,7 @@ Command handlers for `vat init`, `vat start`, `vat block`, `vat unblock`, `vat d
 
 ## Key Findings
 
-1. **CMD-CC-001 cross-segment** — The version-check helper lives at `src/backlog_file.rs:158` (`// @spec FMT-FM-002, CMD-CC-001`). It is correctly placed in the format layer (format-level check, natural home) and is counted as implemented for this segment.
+1. **CMD-CC-001 cross-segment** — implemented and counted as implemented for this segment. See `backlog-format.md` Key Finding #4 for the rationale (the version-check helper lives in the format layer at `src/backlog_file.rs:158`).
 2. **README template ready but not wired** — `src/readme_template.rs` implements CMD-INIT-006 (template with `{prefix}` substitution) and has test coverage. The `cmd_init` handler must call it — no change needed in `readme_template.rs`.
 3. **All command handlers are stubs** — `src/main.rs:92–130`; all eight `cmd_*` functions print to stderr and call `std::process::exit(1)`. No business logic is present.
 4. **Blocked on FMT-MARK-* in backlog-format** — `vat start`, `vat block`, `vat unblock`, `vat done`, and `vat sync` all need bullet marker parsing/serialization (FMT-MARK-001..007) to be implemented first.

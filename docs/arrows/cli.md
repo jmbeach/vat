@@ -41,7 +41,7 @@ No dedicated EARS spec file for this segment. Exit-code specs (CMD-EXIT-001..003
 | Arg parsing | Clap subcommand scaffold complete; no dedicated specs |
 | Error handling | `thiserror` + `anyhow` split described in LLD; not yet wired in main |
 | Exit codes | CMD-EXIT-001..003 in commands-specs.md; 0 implemented |
-| Help/version | Clap defaults sufficient; no explicit specs |
+| Help/version | `--help` via clap default; `--version` not yet exposed (no `version` attribute in main.rs); no explicit specs |
 | Shell completions | Deferred (backlog item vat-k1b) |
 
 ## Key Findings
@@ -49,7 +49,7 @@ No dedicated EARS spec file for this segment. Exit-code specs (CMD-EXIT-001..003
 1. **All stubs exit(1) unconditionally** — `src/main.rs:92–130`. The LLD calls for `anyhow::Result<()>` propagation with `.context(...)` at I/O boundaries; this is not yet wired. Stubs should be replaced with `anyhow`-returning functions.
 2. **No `@spec` annotations in main.rs** — appropriate for now. Once command handlers are implemented, add `// @spec CMD-EXIT-001` (or similar) at the exit-code enforcement point in `main`.
 3. **LLD references two deferred backlog items** — `vat-c9s` (full exit-code table) and `vat-k1b` (shell completions via `clap_complete`); both remain open.
-4. **clap `#[command(version)]`** — version is derived from `Cargo.toml`; no spec needed. `--help` and `--version` work today.
+4. **`--version` is not yet exposed** — `src/main.rs`'s `#[command(...)]` block sets only `name` and `about`; there is no `version` attribute, so clap does not wire up `--version` today. `--help` works (clap default). Adding the one-word `version` attribute (which pulls the version from `Cargo.toml` at compile time) would expose it when desired; no spec needed.
 
 ## Work Required
 

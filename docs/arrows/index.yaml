@@ -11,6 +11,8 @@ taxonomy:
     - commands
 
 # The graph of segments.
+# Per-segment detail files live at docs/arrows/<key>.md by convention
+# (e.g. backlog-format -> backlog-format.md), so no explicit detail field is stored.
 arrows:
   backlog-format:
     status: PARTIAL
@@ -19,7 +21,6 @@ arrows:
     audited_sha: fe4be98b0c964a76142dd6dbd0a1bedbbf26ef41
     blocks: [sync, commands]
     blockedBy: []
-    detail: backlog-format.md
     next: "Implement FMT-MARK-001..007 (bullet marker parsing/serialization), FMT-WS-002 (trailing whitespace strip), and wire FMT-WS-001 callers; implement FMT-FM-005 and FMT-PARSE-006"
     drift: null
 
@@ -30,7 +31,6 @@ arrows:
     audited_sha: fe4be98b0c964a76142dd6dbd0a1bedbbf26ef41
     blocks: []
     blockedBy: [backlog-format]
-    detail: sync.md
     next: "Implement vat sync command — all 23 active SYNC-* specs are gaps; blocked on FMT-MARK-* in backlog-format"
     drift: null
 
@@ -41,9 +41,8 @@ arrows:
     audited_sha: fe4be98b0c964a76142dd6dbd0a1bedbbf26ef41
     blocks: []
     blockedBy: []
-    detail: cli.md
-    next: "Wire anyhow error handling and exit codes in main.rs; add @spec annotations when command handlers are implemented"
-    drift: "src/main.rs has no @spec annotations; all cmd_* functions are stubs that exit(1)"
+    next: "Wire anyhow error handling and exit codes in main.rs; add @spec annotations when command handlers are implemented (all cmd_* functions are currently stubs that exit(1), and main.rs has no @spec annotations yet — expected for a MAPPED segment)"
+    drift: null
 
   commands:
     status: PARTIAL
@@ -52,7 +51,6 @@ arrows:
     audited_sha: fe4be98b0c964a76142dd6dbd0a1bedbbf26ef41
     blocks: []
     blockedBy: [backlog-format, cli]
-    detail: commands.md
     next: "Implement vat init, start, block, unblock, done, config — 34 of 35 active specs are gaps"
     drift: null
 

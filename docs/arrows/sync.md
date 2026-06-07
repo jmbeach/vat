@@ -51,7 +51,7 @@ The `vat sync` command — ID assignment, notes extraction, marker normalization
 ## Key Findings
 
 1. **Blocked on FMT-MARK-* in backlog-format** — `vat sync` cannot normalize markers (SYNC-MARK-001) until FMT-MARK-001..007 (bullet marker parsing/serialization) are implemented in the `backlog-format` segment.
-2. **SYNC-NOTES-004 already implemented** — `src/item_file.rs` implements the indentation-stripping algorithm with `@spec SYNC-NOTES-004` annotations throughout. This primitive is ready to be called from sync.
+2. **SYNC-NOTES-004 infrastructure implemented; spec marker stays `[ ]`** — `src/item_file.rs` implements the indentation-stripping algorithm with `@spec SYNC-NOTES-004` annotations and has test coverage, but the spec marker remains `[ ]` until `cmd_sync` actually calls it as part of the full pipeline. This mirrors how FMT-WS-001 is recorded in `backlog-format.md` (infrastructure present, marker pending caller wiring), and keeps this finding consistent with the Status line and Spec Coverage table above (0 of 23 active specs implemented).
 3. **No sync.rs module yet** — `cmd_sync()` in `src/main.rs:97–100` is a plain stub. The sync pipeline should be implemented in `src/main.rs` (for a small impl) or extracted to `src/sync.rs`.
 
 ## Work Required
