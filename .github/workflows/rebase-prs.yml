@@ -1,4 +1,4 @@
-name: Rebase open PRs
+name: Merge main into open PRs
 
 on:
   push:
@@ -6,17 +6,16 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  rebase:
+  merge:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Rebase open PRs onto main
+      - name: Merge main into open PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -35,18 +34,16 @@ jobs:
               continue
             fi
 
-            echo "PR #$number: rebasing $branch onto main..."
+            echo "PR #$number: merging main into $branch..."
 
             git fetch origin "$branch"
             git checkout -B "$branch" "origin/$branch"
 
-            if git rebase origin/main; then
-              git push origin "$branch" --force-with-lease
+            if git merge origin/main --no-edit; then
+              git push origin "$branch"
               echo "PR #$number: done"
             else
-              git rebase --abort
+              git merge --abort
               echo "PR #$number: conflict — skipping"
-              gh pr comment "$number" \
-                --body "Auto-rebase onto \`main\` failed due to merge conflicts. Please rebase manually."
             fi
           done
