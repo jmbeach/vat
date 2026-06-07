@@ -16,7 +16,7 @@ pub(crate) enum InitError {
     AlreadyInitialized,
     #[error("{0}")]
     InvalidPrefix(#[from] ConfigError),
-    #[error("IO error creating backlog/: {0}")]
+    #[error("IO error initializing backlog/: {0}")]
     Io(#[from] io::Error),
 }
 
@@ -39,7 +39,31 @@ pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitErro
     let normalized = config.project_id().to_string();
 
     // CMD-INIT-005: create directory and write all required files.
+    // If any write fails after the directory is created, remove the
+    // partially-populated backlog/ so the CMD-INIT-001 AlreadyInitialized
+    // guard doesn't permanently block a retry.
     fs::create_dir_all(&backlog_dir)?;
+    if let Err(e) = write_backlog_files(&backlog_dir, &config, &normalized) {
+        // Best-effort cleanup; ignore any secondary error so the original
+        // write failure is what surfaces to the user.
+        let _ = fs::remove_dir_all(&backlog_dir);
+        return Err(e);
+    }
+
+    Ok(format!("initialized backlog/ with prefix {normalized}"))
+}
+
+/// Write the four backlog files into an already-created `backlog_dir`.
+///
+/// Split out from `init` so that a write failure partway through can be
+/// cleaned up by the caller (removing the half-populated directory) rather
+/// than leaving the user stuck behind the `AlreadyInitialized` guard.
+// @spec CMD-INIT-005, CMD-INIT-006
+fn write_backlog_files(
+    backlog_dir: &Path,
+    config: &ProjectConfig,
+    normalized: &str,
+) -> Result<(), InitError> {
     file_io::write(backlog_dir.join("vat.toml"), &config.serialize())?;
     file_io::write(backlog_dir.join("backlog.md"), "---\nversion: 1\n---\n")?;
     file_io::write(backlog_dir.join(".used-ids"), "")?;
@@ -47,10 +71,10 @@ pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitErro
     // CMD-INIT-006: render template and write README (written once; never read by any other command).
     file_io::write(
         backlog_dir.join("README.md"),
-        &readme_template::render(&normalized),
+        &readme_template::render(normalized),
     )?;
 
-    Ok(format!("initialized backlog/ with prefix {normalized}"))
+    Ok(())
 }
 
 #[cfg(test)]
@@ -93,10 +117,7 @@ mod tests {
     fn init_uses_supplied_prefix() {
         let dir = tempfile::tempdir().unwrap();
         let msg = init(dir.path(), "vat").unwrap();
-        assert!(
-            msg.contains("vat"),
-            "success message should name the prefix"
-        );
+        assert_eq!(msg, "initialized backlog/ with prefix vat");
     }
 
     // @spec CMD-INIT-004

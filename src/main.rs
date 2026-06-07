@@ -108,7 +108,16 @@ fn prompt_for_prefix() -> String {
     print!("Project prefix (3 Crockford base32 chars): ");
     io::stdout().flush().ok();
     let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap_or_default();
+    // A closed stdin (non-interactive: CI pipeline, `vat init < /dev/null`)
+    // yields Ok(0); surface that explicitly instead of silently falling
+    // through to a confusing "invalid prefix" error on the empty string.
+    match io::stdin().read_line(&mut input) {
+        Ok(0) | Err(_) => {
+            eprintln!("error: could not read prefix from stdin; try `vat init <prefix>`");
+            std::process::exit(1);
+        }
+        Ok(_) => {}
+    }
     input.trim().to_string()
 }
 
