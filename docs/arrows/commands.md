@@ -4,7 +4,7 @@ Single-entry and config commands — init, start, block, unblock, done, config g
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-05 (git SHA `426964053f024c0e1380a365543da31798536bb7`). Only CMD-CC-001 (version check) is implemented; all command bodies are stubs. Infrastructure for CMD-INIT-006 (README template) exists and is tested but is not yet wired into `vat init`.
+**PARTIAL** — last audited 2026-06-05 (see `index.yaml` for audited SHA). Only CMD-CC-001 (version check) is implemented; all command bodies are stubs. Infrastructure for CMD-INIT-006 (README template) exists and is tested but is not yet wired into `vat init`.
 
 ## References
 
@@ -16,7 +16,7 @@ Single-entry and config commands — init, start, block, unblock, done, config g
 - docs/llds/backlog-format.md (shared file grammar and `find_entry` helper)
 
 ### EARS
-- docs/specs/commands-specs.md (38 active specs: 1 implemented, 34 gaps, 4 deferred)
+- docs/specs/commands-specs.md (35 active specs: 1 implemented, 34 gaps, 4 deferred)
 
 ### Tests
 - src/backlog_file.rs (inline `#[cfg(test)]` — CMD-CC-001 version check)
@@ -50,7 +50,7 @@ Single-entry and config commands — init, start, block, unblock, done, config g
 | Exit codes (CMD-EXIT) | CMD-EXIT-001 to CMD-EXIT-003 | 0 | 3 | 0 |
 | Deferred | CMD-LOCK-001, CMD-FORCE-001, CMD-DRYRUN-001, CMD-INIT-ADOPT-001 | — | — | 4 |
 
-**Summary:** 1 of 34 active specs implemented (CMD-CC-001); 34 gaps; 4 deferred.
+**Summary:** 1 of 35 active specs implemented (CMD-CC-001); 34 gaps; 4 deferred.
 
 ## Key Findings
 
@@ -62,7 +62,7 @@ Single-entry and config commands — init, start, block, unblock, done, config g
 
 4. **CMD-CC-002 and CMD-CC-003 are gaps** — the `find_entry(id)` helper that returns "unknown id" errors and writes bullets in canonical marker order does not yet exist.
 
-5. **blockedBy backlog-format** — bullet-mutating commands (start, block, unblock, done) depend on the `find_entry` helper, which in turn depends on bullet-line parsing (FMT-PARSE-*) and marker parsing (FMT-MARK-*) — both active gaps in the backlog-format segment.
+5. **blockedBy backlog-format** *(derived from `index.yaml` dependency graph — remove when `commands.blockedBy` edge resolves)* — bullet-mutating commands (start, block, unblock, done) depend on the `find_entry` helper, which in turn depends on bullet-line parsing (FMT-PARSE-*) and marker parsing (FMT-MARK-*) — both active gaps in the backlog-format segment.
 
 ## Work Required
 

@@ -4,7 +4,7 @@ The binary's outer shell — argument parsing, error handling strategy, exit cod
 
 ## Status
 
-**MAPPED** — last audited 2026-06-05 (git SHA `426964053f024c0e1380a365543da31798536bb7`). Structure is known and clap-based argument parsing is fully wired in `src/main.rs`. No dedicated EARS spec file exists; exit-code specs live in `commands-specs.md`.
+**MAPPED** — last audited 2026-06-05 (see `index.yaml` for audited SHA). Structure is known and clap-based argument parsing is fully wired in `src/main.rs`. No dedicated EARS spec file exists; exit-code specs live in `commands-specs.md`.
 
 ## References
 

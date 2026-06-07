@@ -4,7 +4,7 @@ On-disk file formats and low-level parsing primitives — backlog.md regions, bu
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-05 (git SHA `426964053f024c0e1380a365543da31798536bb7`). Frontmatter, region splitting, base32, item files, tombstone, and config parsing are implemented and tested. Bullet-line parsing (FMT-PARSE-*) and marker parsing/serialization (FMT-MARK-*) are not yet implemented.
+**PARTIAL** — last audited 2026-06-05 (see `index.yaml` for audited SHA). Frontmatter, region splitting, base32, item files, tombstone, and config parsing are implemented and tested. Bullet-line parsing (FMT-PARSE-*) and marker parsing/serialization (FMT-MARK-*) are not yet implemented.
 
 ## References
 

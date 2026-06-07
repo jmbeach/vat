@@ -4,7 +4,7 @@ The `vat sync` command — ID assignment, marker normalization, notes extraction
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-05 (git SHA `426964053f024c0e1380a365543da31798536bb7`). The sync command is a stub. Indentation-stripping utility (SYNC-NOTES-004 infrastructure) exists in `src/item_file.rs` but is not yet invoked by the sync command. All 23 active SYNC-* specs are gaps.
+**PARTIAL** — last audited 2026-06-05 (see `index.yaml` for audited SHA). The sync command is a stub. Indentation-stripping utility (SYNC-NOTES-004 infrastructure) exists in `src/item_file.rs` but is not yet invoked by the sync command. All 23 active SYNC-* specs are gaps.
 
 ## References
 
@@ -56,7 +56,7 @@ The `vat sync` command — ID assignment, marker normalization, notes extraction
 
 2. **SYNC-NOTES-004 infrastructure is ready** — `src/item_file.rs::strip_indent()` implements the indentation-stripping algorithm (longest-common-leading-whitespace-byte-prefix, tab≠space, blank-line exclusion) and is tested. It will be called by sync's notes-extraction path once the command body is implemented.
 
-3. **Hard dependency on backlog-format bullet parsing** — sync cannot proceed until FMT-PARSE-* and FMT-MARK-* are implemented in the backlog-format segment, as it needs to parse bullet lines to find unID'd bullets and normalize marker order.
+3. **Hard dependency on backlog-format bullet parsing** *(derived from `index.yaml` dependency graph — remove when `sync.blockedBy` edge resolves)* — sync cannot proceed until FMT-PARSE-* and FMT-MARK-* are implemented in the backlog-format segment, as it needs to parse bullet lines to find unID'd bullets and normalize marker order.
 
 4. **Infrastructure for other sub-tasks exists** — `src/base32.rs::random()` (ID generation) and `src/tombstone.rs::read()`/`append()` (used-ID tracking) are fully implemented. Once the bullet parser is available, the sync algorithm can be assembled from existing pieces.
 

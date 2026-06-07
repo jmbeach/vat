@@ -17,7 +17,9 @@ arrows:
     sampled: 2026-06-05
     audited: 2026-06-05
     audited_sha: 426964053f024c0e1380a365543da31798536bb7
-    blocks: []
+    blocks:
+      - commands
+      - sync
     blockedBy: []
     detail: backlog-format.md
     next: "Implement bullet-line parsing (FMT-PARSE-*), marker parsing/serialization (FMT-MARK-*), FMT-FM-005, FMT-WS-001 caller wiring, FMT-WS-002"
@@ -43,7 +45,7 @@ arrows:
     blockedBy:
       - backlog-format
     detail: commands.md
-    next: "Implement all command bodies: init, start, block, unblock, done, config get/set (34 active spec gaps)"
+    next: "Implement all command bodies: init, start, block, unblock, done, config get/set"
     drift: "All command implementations are stubs in main.rs; only CMD-CC-001 and CMD-INIT-006 infrastructure have @spec coverage"
 
   sync:
@@ -55,7 +57,7 @@ arrows:
     blockedBy:
       - backlog-format
     detail: sync.md
-    next: "Implement vat sync command body covering all 23 active SYNC-* specs"
+    next: "Implement vat sync command body"
     drift: "vat sync is a stub; SYNC-NOTES-004 indentation-stripping utility exists in item_file.rs but is not yet invoked by sync"
 
 unmapped:
