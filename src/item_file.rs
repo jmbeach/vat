@@ -5,7 +5,6 @@
 // `backlog_file` and `project_config` modules.
 #![allow(dead_code)]
 
-use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -13,7 +12,7 @@ use std::str::Utf8Error;
 
 use thiserror::Error;
 
-use crate::backlog_file;
+use crate::{backlog_file, file_io};
 
 #[derive(Debug, Error)]
 pub(crate) enum ItemFileError {
@@ -180,12 +179,14 @@ fn filename_stem(path: &Path) -> String {
         .to_string()
 }
 
-fn normalize_crlf(s: &str) -> Cow<'_, str> {
-    if s.contains("\r\n") {
-        Cow::Owned(s.replace("\r\n", "\n"))
-    } else {
-        Cow::Borrowed(s)
-    }
+/// Normalize all line-ending conventions (CRLF *and* bare CR) to LF, so no stray
+/// `\r` byte survives into a written item file. Delegates to the single shared
+/// implementation in `file_io` rather than re-deriving a CRLF-only variant here:
+/// FMT-WS-001 requires bare-CR normalization too, and item files are
+/// VAT-managed files.
+// @spec FMT-WS-001
+fn normalize_crlf(s: &str) -> String {
+    file_io::normalize_line_endings(s)
 }
 
 /// The length, in bytes, of the longest leading-whitespace prefix shared by all
@@ -309,6 +310,16 @@ mod tests {
     fn strip_notes_normalizes_crlf() {
         // CRLF input must not leave stray `\r` bytes on the kept lines.
         let out = strip_notes("  foo\r\n  bar\r\n");
+        assert_eq!(out, "foo\nbar");
+        assert!(!out.contains('\r'));
+    }
+
+    // @spec SYNC-NOTES-004, FMT-WS-001
+    #[test]
+    fn strip_notes_normalizes_bare_cr() {
+        // Old-Mac bare-CR line endings must also be normalized (FMT-WS-001),
+        // otherwise the dedent and join would carry a stray `\r` into the file.
+        let out = strip_notes("  foo\r  bar\r");
         assert_eq!(out, "foo\nbar");
         assert!(!out.contains('\r'));
     }
@@ -537,6 +548,18 @@ mod tests {
         let dir = tmp();
         let path = dir.path().join("foo-7k2.md");
         fs::write(&path, "---\r\nid: foo-7k2\r\n---\r\n\r\nbody line\r\n").unwrap();
+        let f = read(&path).unwrap();
+        assert!(!f.body().contains('\r'));
+        assert_eq!(f.body(), "\nbody line\n");
+    }
+
+    // @spec FMT-WS-001
+    #[test]
+    fn read_normalizes_bare_cr_to_lf() {
+        let dir = tmp();
+        let path = dir.path().join("foo-7k2.md");
+        // Bare-CR line endings throughout, including in the frontmatter delimiters.
+        fs::write(&path, "---\rid: foo-7k2\r---\r\rbody line\r").unwrap();
         let f = read(&path).unwrap();
         assert!(!f.body().contains('\r'));
         assert_eq!(f.body(), "\nbody line\n");

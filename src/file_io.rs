@@ -17,7 +17,8 @@ pub(crate) fn write(path: impl AsRef<Path>, contents: &str) -> io::Result<()> {
     fs::write(path, contents)
 }
 
-fn normalize_line_endings(input: &str) -> String {
+// @spec FMT-WS-001
+pub(crate) fn normalize_line_endings(input: &str) -> String {
     if !input.contains('\r') {
         return input.to_string();
     }

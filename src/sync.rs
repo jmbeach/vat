@@ -23,6 +23,20 @@ pub(crate) enum SyncError {
     ItemFile(#[from] item_file::ItemFileError),
 }
 
+/// Whether [`run`] wrote `backlog.md` or skipped the write because the
+/// serialized output was byte-identical to the input (SYNC-WRITE-002).
+///
+/// Exposing this lets callers (and tests) observe the skip decision directly,
+/// instead of inferring it from filesystem mtime — which has coarse granularity
+/// on some filesystems and can update spuriously on others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyncOutcome {
+    /// `backlog.md` was rewritten.
+    Wrote,
+    /// The write was skipped; `backlog.md` is untouched.
+    Skipped,
+}
+
 /// Run the notes-extraction step of `vat sync`.
 ///
 /// For each task entry that has note lines:
@@ -35,11 +49,11 @@ pub(crate) enum SyncError {
 ///   (SYNC-NOTES-001, SYNC-NOTES-005).
 ///
 /// Skips the `backlog.md` write when the output is byte-identical to the input
-/// (SYNC-WRITE-002). Creates `backlog/items/` on demand via `item_file::write_new`
-/// (SYNC-WRITE-004).
+/// (SYNC-WRITE-002), reporting that via the returned [`SyncOutcome`]. Creates
+/// `backlog/items/` on demand via `item_file::write_new` (SYNC-WRITE-004).
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
 // @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
-pub(crate) fn run(backlog_dir: &Path) -> Result<(), SyncError> {
+pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let backlog_path = backlog_dir.join("backlog.md");
     let items_dir = backlog_dir.join("items");
 
@@ -62,20 +76,33 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<(), SyncError> {
         let id: Option<String> = extract_id(entry.bullet_line).map(str::to_owned);
 
         if !notes.is_empty() {
-            // SYNC-NOTES-004: strip common leading whitespace and trim blank edges.
-            let stripped = item_file::strip_notes(&notes);
+            // SYNC-NOTES-004: strip to decide whether there is any real content
+            // after dedent/trim. This is a guard only — the actual stripped text
+            // is re-derived inside `write_new`/`append_notes` (both strip the raw
+            // `notes` internally), so we deliberately do not thread it through.
+            let has_content = !item_file::strip_notes(&notes).is_empty();
 
-            if !stripped.is_empty()
-                && let Some(ref id) = id
-            {
+            if has_content && let Some(ref id) = id {
                 let item_path = items_dir.join(format!("{id}.md"));
+                // Routing by `exists()` is a hint, not a guarantee: a concurrent
+                // `vat sync` could create the file between this check and the
+                // write. `write_new` uses `create_new` (atomic), so if we lose
+                // that race we fall back to appending rather than surfacing
+                // `AlreadyExists` as a hard error — both paths converge on the
+                // SYNC-NOTES-003 (append) behaviour.
                 if item_path.exists() {
                     // SYNC-NOTES-003: append to existing item file.
                     item_file::append_notes(&item_path, &notes)?;
                 } else {
                     // SYNC-NOTES-002: create new item file.
                     // `write_new` calls `create_dir_all` → satisfies SYNC-WRITE-004.
-                    item_file::write_new(&item_path, id, &notes)?;
+                    match item_file::write_new(&item_path, id, &notes) {
+                        Ok(()) => {}
+                        Err(item_file::ItemFileError::AlreadyExists(_)) => {
+                            item_file::append_notes(&item_path, &notes)?;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
                 }
             }
             // No ID on this bullet: notes are still cleared below (see SYNC-NOTES-001).
@@ -90,11 +117,11 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<(), SyncError> {
 
     // SYNC-WRITE-002: skip write when byte-identical.
     if output == input {
-        return Ok(());
+        return Ok(SyncOutcome::Skipped);
     }
 
     file_io::write(&backlog_path, &output)?;
-    Ok(())
+    Ok(SyncOutcome::Wrote)
 }
 
 /// Scan all `[…]` bracket tokens in a bullet line and return the first whose
@@ -128,7 +155,7 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    use super::{SyncError, extract_id, run};
+    use super::{SyncError, SyncOutcome, extract_id, run};
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -136,11 +163,9 @@ mod tests {
         tempfile::tempdir().expect("tempdir")
     }
 
-    /// Write `backlog.md` into `dir/` and return the path to `dir/`.
-    fn write_backlog(dir: &TempDir, content: &str) -> std::path::PathBuf {
-        let d = dir.path().to_path_buf();
-        fs::write(d.join("backlog.md"), content).expect("write backlog.md");
-        d
+    /// Write `backlog.md` into `dir/`.
+    fn write_backlog(dir: &TempDir, content: &str) {
+        fs::write(dir.path().join("backlog.md"), content).expect("write backlog.md");
     }
 
     fn read_backlog(dir: &TempDir) -> String {
@@ -367,20 +392,28 @@ mod tests {
         let content = "- [vat-t1h] Title\n";
         write_backlog(&dir, content);
 
-        // Record the file's modification time before and after.
-        let before = fs::metadata(dir.path().join("backlog.md"))
-            .unwrap()
-            .modified()
-            .unwrap();
-        run(dir.path()).unwrap();
-        let after = fs::metadata(dir.path().join("backlog.md"))
-            .unwrap()
-            .modified()
-            .unwrap();
-
-        // mtime must not change if sync skipped the write.
-        assert_eq!(before, after, "file should not have been touched");
+        // `run` reports the skip directly. Asserting on the returned outcome is
+        // deterministic, unlike an mtime comparison whose granularity varies by
+        // filesystem (e.g. 2-second resolution on FAT32) and can update
+        // spuriously on some network mounts.
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(
+            outcome,
+            SyncOutcome::Skipped,
+            "byte-identical write skipped"
+        );
         assert_eq!(read_backlog(&dir), content);
+    }
+
+    // @spec SYNC-WRITE-002
+    #[test]
+    fn run_reports_wrote_when_backlog_changes() {
+        let dir = setup();
+        // A bullet with notes — sync clears them, so the output differs and the
+        // file is rewritten.
+        write_backlog(&dir, "- [vat-t1h] Title\n  A note.\n");
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Wrote, "changed backlog was rewritten");
     }
 
     // ── SYNC-WRITE-004 (create items/ dir) ───────────────────────────────────
