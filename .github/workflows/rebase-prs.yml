@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   rebase:
@@ -46,7 +45,5 @@ jobs:
             else
               git rebase --abort
               echo "PR #$number: conflict — skipping"
-              gh pr comment "$number" \
-                --body "Auto-rebase onto \`main\` failed due to merge conflicts. Please rebase manually."
             fi
           done
