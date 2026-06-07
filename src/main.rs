@@ -4,6 +4,7 @@ mod file_io;
 mod item_file;
 mod project_config;
 mod readme_template;
+mod sync;
 mod tombstone;
 mod user_config;
 
@@ -95,8 +96,11 @@ fn cmd_init(_prefix: Option<String>) {
 }
 
 fn cmd_sync() {
-    eprintln!("vat sync: not yet implemented");
-    std::process::exit(1);
+    let backlog_dir = std::path::Path::new("backlog");
+    if let Err(e) = sync::run(backlog_dir) {
+        eprintln!("vat sync: {e}");
+        std::process::exit(1);
+    }
 }
 
 fn cmd_start(_id: String) {
