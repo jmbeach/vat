@@ -1,0 +1,63 @@
+schema_version: 1
+last_updated: 2026-06-08
+
+# Organizational grouping — does not affect audit logic.
+taxonomy:
+  file-formats:
+    - backlog-format
+  commands:
+    - cli
+    - commands
+    - sync
+
+# Arrow segments — authoritative for status, timestamps, and dependency graph.
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-08
+    audited: 2026-06-08
+    audited_sha: e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14
+    blocks: [commands, sync]
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Implement FMT-MARK-001..007 (bullet marker parsing/serialization), FMT-WS-002 (trailing-whitespace strip), and FMT-PARSE-006 (empty-bullet warning)"
+    drift: "FMT-WS-001 has @spec annotations in file_io.rs and item_file.rs but spec marker is still [ ] — review whether partial wiring justifies a status update"
+
+  cli:
+    status: PARTIAL
+    sampled: 2026-06-08
+    audited: 2026-06-08
+    audited_sha: e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14
+    blocks: [commands, sync]
+    blockedBy: []
+    detail: cli.md
+    next: "Wire all command bodies to their implementations; currently all are stubs (eprintln + exit 1)"
+    drift: null
+
+  commands:
+    status: PARTIAL
+    sampled: 2026-06-08
+    audited: 2026-06-08
+    audited_sha: e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14
+    blocks: []
+    blockedBy: [backlog-format, cli]
+    detail: commands.md
+    next: "Implement all command bodies (init, start, block, unblock, done, config); only CMD-CC-001 and readme_template (CMD-INIT-006 partial) are implemented"
+    drift: "CMD-INIT-006 has @spec annotation in readme_template.rs but spec marker is [ ] pending CMD-INIT-005 (init write wiring) — intentional partial, no action needed"
+
+  sync:
+    status: PARTIAL
+    sampled: 2026-06-08
+    audited: 2026-06-08
+    audited_sha: e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14
+    blocks: []
+    blockedBy: [backlog-format, cli]
+    detail: sync.md
+    next: "Implement vat sync command body; all 23 active SYNC-* specs are gaps; underlying library modules (backlog_file, item_file, tombstone) are ready"
+    drift: null
+
+# Artifacts found during exploration that don't belong to a specific segment.
+unmapped:
+  docs:
+    llds: []
+    specs: []
