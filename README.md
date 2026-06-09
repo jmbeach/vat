@@ -12,7 +12,7 @@ But `vat` is great for both agents and humans.
 
 It's low friction, compact, and simple.
 
-In fact, right now the binary for `vat` is unfinished, but I've been using it tons in the [skill](./.claude/skills/vat/SKILL.md) form. Not only that, but I've been using `vat` to build `vat` before its completion using the skill. Take a look at the [backlog](./backlog/backlog.md) to see a good example of what a `vat` backlog looks like and the current state of the project.
+In fact, right now the binary for `vat` is unfinished, but I've been using it tons in the [skill](./.claude/skills/vat/SKILL.md) form. Not only that, but I've been using `vat` to build `vat` before its completion using the skill. Take a look at the [backlog](https://github.com/jmbeach/vat-backlog/blob/main/backlog.md) to see a good example of what a `vat` backlog looks like and the current state of the project.
 
 At it's core, `vat` is just a markdown file that has single line entries for each task in the backlog. If the information needed to capture the task fully extends past one line, `vat` stores the rest of the information of that item in a file under `backlog/items/<id>.md` You can add tags to a backlog item using square brackets. Ex: `[in-progress]` or `[by:jared]`.
 
