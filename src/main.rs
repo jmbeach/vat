@@ -191,11 +191,11 @@ mod tests {
     use std::path::PathBuf;
 
     use super::classify_exit_code;
-    use crate::backlog_file::{UnsupportedVersion, SUPPORTED_MAJOR};
+    use crate::UserError;
+    use crate::backlog_file::{SUPPORTED_MAJOR, UnsupportedVersion};
     use crate::base32::Base32Error;
     use crate::project_config::ConfigError;
     use crate::user_config::UserConfigError;
-    use crate::UserError;
 
     fn anyhow(e: impl std::error::Error + Send + Sync + 'static) -> anyhow::Error {
         anyhow::Error::from(e)
