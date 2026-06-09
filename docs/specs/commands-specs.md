@@ -50,12 +50,12 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat config`
 
-- [ ] **CMD-CFG-001** — `vat config get user.name` shall print the value from the user config to stdout, or exit non-zero with no output if unset.
-- [ ] **CMD-CFG-002** — `vat config get project.id` shall print the value from `backlog/vat.toml` to stdout, or exit non-zero with no output if unset.
-- [ ] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
-- [ ] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 Crockford base32 characters.
-- [ ] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
-- [ ] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
+- [x] **CMD-CFG-001** — `vat config get user.name` shall print the value from the user config to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
+- [x] **CMD-CFG-002** — `vat config get project.id` shall print the value from `backlog/vat.toml` to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
+- [x] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
+- [x] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 Crockford base32 characters.
+- [x] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
+- [x] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
 
 ## Exit codes
 
