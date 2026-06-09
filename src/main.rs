@@ -96,6 +96,9 @@ fn cmd_init(_prefix: Option<String>) {
 }
 
 fn cmd_sync() {
+    eprintln!(
+        "warning: vat sync is partial — ID assignment not yet wired (vat-s9g); notes are extracted but IDs are not assigned"
+    );
     let backlog_dir = std::path::Path::new("backlog");
     if let Err(e) = sync::run(backlog_dir) {
         eprintln!("vat sync: {e}");

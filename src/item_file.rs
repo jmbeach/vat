@@ -69,11 +69,23 @@ pub(crate) fn read(path: &Path) -> Result<ItemFile, ItemFileError> {
 /// existence check and the write a single atomic operation (no TOCTOU window).
 // @spec FMT-ITEM-001, FMT-WS-001
 pub(crate) fn write_new(path: &Path, id: &str, body: &str) -> Result<(), ItemFileError> {
+    write_new_stripped(path, id, &strip_notes(body))
+}
+
+/// Like [`write_new`], but accepts body that has already been stripped by
+/// [`strip_notes`]. The caller's stripped result is written directly — no
+/// second strip — so there is a single source of truth for the stripping
+/// semantics.
+// @spec FMT-ITEM-001, FMT-WS-001
+pub(crate) fn write_new_stripped(
+    path: &Path,
+    id: &str,
+    stripped_body: &str,
+) -> Result<(), ItemFileError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| io_err(parent, e))?;
     }
-    let stripped = strip_notes(body);
-    let contents = format!("---\nid: {id}\n---\n\n{stripped}\n");
+    let contents = format!("---\nid: {id}\n---\n\n{stripped_body}\n");
     let mut file = match OpenOptions::new().write(true).create_new(true).open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
@@ -100,11 +112,17 @@ pub(crate) fn write_new(path: &Path, id: &str, body: &str) -> Result<(), ItemFil
 /// truncates the accumulated notes.
 // @spec FMT-ITEM-002, FMT-WS-001
 pub(crate) fn append_notes(path: &Path, new_notes: &str) -> Result<(), ItemFileError> {
+    append_notes_stripped(path, &strip_notes(new_notes))
+}
+
+/// Like [`append_notes`], but accepts new notes that have already been stripped
+/// by [`strip_notes`]. The caller's stripped result is appended directly — no
+/// second strip — so there is a single source of truth for the stripping
+/// semantics.
+// @spec FMT-ITEM-002, FMT-WS-001
+pub(crate) fn append_notes_stripped(path: &Path, stripped_new: &str) -> Result<(), ItemFileError> {
     let (frontmatter, existing_body) = read_split(path)?;
-    // Collapse the existing body's trailing newlines to nothing, then re-join with a
-    // single blank line so repeated appends produce a predictable shape (Q3A).
     let trimmed_body = existing_body.trim_end_matches('\n');
-    let stripped_new = strip_notes(new_notes);
     let contents = format!("{frontmatter}{trimmed_body}\n\n{stripped_new}\n");
     write_atomic(path, &contents)
 }

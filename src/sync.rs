@@ -37,6 +37,15 @@ pub(crate) enum SyncOutcome {
     Skipped,
 }
 
+struct PendingWrite {
+    item_path: std::path::PathBuf,
+    id: String,
+    // SYNC-NOTES-004: stripped once by the caller; single source of truth for
+    // stripping semantics (passed to write_new_stripped/append_notes_stripped
+    // which skip the internal strip call).
+    stripped: String,
+}
+
 /// Run the notes-extraction step of `vat sync`.
 ///
 /// For each task entry that has note lines:
@@ -50,7 +59,7 @@ pub(crate) enum SyncOutcome {
 ///
 /// Skips the `backlog.md` write when the output is byte-identical to the input
 /// (SYNC-WRITE-002), reporting that via the returned [`SyncOutcome`]. Creates
-/// `backlog/items/` on demand via `item_file::write_new` (SYNC-WRITE-004).
+/// `backlog/items/` on demand via `item_file::write_new_stripped` (SYNC-WRITE-004).
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
 // @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
@@ -70,42 +79,31 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
 
     let mut region = ParsedRegion::parse(bf.parsed());
 
+    // Collect all item-file writes before touching any file.  A scan-phase
+    // error (e.g. disk full) therefore leaves disk state unchanged: no item
+    // file is written and `backlog.md` is not modified.
+    //
+    // Note: the write phase (step A: item files, step B: backlog.md) is not
+    // truly atomic.  A crash between A and B leaves orphaned item-file writes
+    // that will be re-processed and double-appended on the next `vat sync` run.
+    // Truly atomic cross-file writes require OS support that is out of scope.
+    let mut pending: Vec<PendingWrite> = Vec::new();
+
     for entry in &mut region.entries {
-        // Clone to owned values before any mutation of `entry`.
         let notes: String = entry.notes.to_owned();
         let id: Option<String> = extract_id(entry.bullet_line).map(str::to_owned);
 
         if !notes.is_empty() {
-            // SYNC-NOTES-004: strip to decide whether there is any real content
-            // after dedent/trim. This is a guard only — the actual stripped text
-            // is re-derived inside `write_new`/`append_notes` (both strip the raw
-            // `notes` internally), so we deliberately do not thread it through.
-            let has_content = !item_file::strip_notes(&notes).is_empty();
-
-            if has_content && let Some(ref id) = id {
-                let item_path = items_dir.join(format!("{id}.md"));
-                // Routing by `exists()` is a hint, not a guarantee: a concurrent
-                // `vat sync` could create the file between this check and the
-                // write. `write_new` uses `create_new` (atomic), so if we lose
-                // that race we fall back to appending rather than surfacing
-                // `AlreadyExists` as a hard error — both paths converge on the
-                // SYNC-NOTES-003 (append) behaviour.
-                if item_path.exists() {
-                    // SYNC-NOTES-003: append to existing item file.
-                    item_file::append_notes(&item_path, &notes)?;
-                } else {
-                    // SYNC-NOTES-002: create new item file.
-                    // `write_new` calls `create_dir_all` → satisfies SYNC-WRITE-004.
-                    match item_file::write_new(&item_path, id, &notes) {
-                        Ok(()) => {}
-                        Err(item_file::ItemFileError::AlreadyExists(_)) => {
-                            item_file::append_notes(&item_path, &notes)?;
-                        }
-                        Err(e) => return Err(e.into()),
-                    }
-                }
+            let stripped = item_file::strip_notes(&notes);
+            if !stripped.is_empty()
+                && let Some(id) = id
+            {
+                pending.push(PendingWrite {
+                    item_path: items_dir.join(format!("{id}.md")),
+                    id,
+                    stripped,
+                });
             }
-            // No ID on this bullet: notes are still cleared below (see SYNC-NOTES-001).
         }
 
         // SYNC-NOTES-001, SYNC-NOTES-005: always clear notes from this entry.
@@ -120,6 +118,30 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
         return Ok(SyncOutcome::Skipped);
     }
 
+    // Step A: write item files.
+    for pw in pending {
+        // Routing by `exists()` is a hint, not a guarantee: a concurrent
+        // `vat sync` could create the file between this check and the write.
+        // `write_new_stripped` uses `create_new` (atomic), so if we lose that
+        // race we fall back to appending — both paths converge on the
+        // SYNC-NOTES-003 (append) behaviour.
+        if pw.item_path.exists() {
+            // SYNC-NOTES-003: append to existing item file.
+            item_file::append_notes_stripped(&pw.item_path, &pw.stripped)?;
+        } else {
+            // SYNC-NOTES-002: create new item file.
+            // `write_new_stripped` calls `create_dir_all` → satisfies SYNC-WRITE-004.
+            match item_file::write_new_stripped(&pw.item_path, &pw.id, &pw.stripped) {
+                Ok(()) => {}
+                Err(item_file::ItemFileError::AlreadyExists(_)) => {
+                    item_file::append_notes_stripped(&pw.item_path, &pw.stripped)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+    }
+
+    // Step B: write backlog.md.
     file_io::write(&backlog_path, &output)?;
     Ok(SyncOutcome::Wrote)
 }
@@ -129,10 +151,9 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
 ///
 /// Bullets carry multiple marker tokens (`[in-progress]`, `[blocked-by:…]`,
 /// etc.); only a token whose two dash-separated segments are both valid 3-char
-/// Crockford base32 strings is treated as an ID marker.  Returning the *first*
-/// match relies on canonical marker ordering (ID appears first), but the scan
-/// is order-independent and will find a valid ID wherever it appears in the
-/// line, so out-of-order bullets still work.
+/// Crockford base32 strings is treated as an ID marker.  The scan can find a
+/// valid ID at any position in the line; if multiple ID-shaped tokens appear
+/// (e.g. `[vat-t1h] [vat-g5y] Title`), the first one wins.
 fn extract_id(bullet_line: &str) -> Option<&str> {
     let mut s = bullet_line.strip_prefix("- ")?;
     loop {
@@ -478,6 +499,23 @@ mod tests {
         assert!(out.contains("# Heading\n"), "preamble preserved");
         assert!(out.contains("Freeform text here."), "freeform preserved");
         assert!(!out.contains("  note"), "notes cleared");
+    }
+
+    // ── Frontmatter-less backlog is accepted ─────────────────────────────────
+
+    #[test]
+    fn run_accepts_backlog_without_frontmatter() {
+        // A backlog.md with no YAML frontmatter block is valid: the parsed
+        // region is the whole file.  Notes are cleared and item files created
+        // just as they would be with frontmatter present.
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h] Title\n  A note.\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        assert_eq!(out, "- [vat-t1h] Title\n", "notes cleared");
+        let item_path = dir.path().join("items").join("vat-t1h.md");
+        assert!(item_path.exists(), "item file created");
+        assert!(fs::read_to_string(item_path).unwrap().contains("A note."));
     }
 
     // ── Entry with no notes is a pass-through ─────────────────────────────────
