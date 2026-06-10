@@ -1,7 +1,7 @@
 use std::io;
 
 use clap::CommandFactory;
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 
 // @spec CMD-COMP-001, CMD-COMP-002
 pub fn run<C: CommandFactory>(shell: Shell) {
@@ -32,7 +32,10 @@ mod tests {
     fn bash_completions_are_nonempty_and_mention_vat() {
         let out = completions_output(Shell::Bash);
         assert!(!out.is_empty(), "bash completions should be non-empty");
-        assert!(out.contains("vat"), "bash completions should reference the binary name");
+        assert!(
+            out.contains("vat"),
+            "bash completions should reference the binary name"
+        );
     }
 
     // @spec CMD-COMP-001, CMD-COMP-002
@@ -40,7 +43,10 @@ mod tests {
     fn zsh_completions_are_nonempty_and_mention_vat() {
         let out = completions_output(Shell::Zsh);
         assert!(!out.is_empty(), "zsh completions should be non-empty");
-        assert!(out.contains("vat"), "zsh completions should reference the binary name");
+        assert!(
+            out.contains("vat"),
+            "zsh completions should reference the binary name"
+        );
     }
 
     // @spec CMD-COMP-001, CMD-COMP-002
@@ -48,6 +54,9 @@ mod tests {
     fn fish_completions_are_nonempty_and_mention_vat() {
         let out = completions_output(Shell::Fish);
         assert!(!out.is_empty(), "fish completions should be non-empty");
-        assert!(out.contains("vat"), "fish completions should reference the binary name");
+        assert!(
+            out.contains("vat"),
+            "fish completions should reference the binary name"
+        );
     }
 }
