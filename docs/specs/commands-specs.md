@@ -12,13 +12,13 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat init`
 
-- [ ] **CMD-INIT-001** — When `backlog/` already exists, `vat init` shall abort with an error.
-- [ ] **CMD-INIT-002** — When invoked with `vat init <prefix>`, the system shall use `<prefix>` as the project ID prefix.
-- [ ] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
-- [ ] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
-- [ ] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
-- [ ] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow. (Template baked into the binary as `readme_template::BACKLOG_README_TEMPLATE`; marker stays `[ ]` pending `vat init` write wiring per CMD-INIT-005.)
-- [ ] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
+- [x] **CMD-INIT-001** — When `backlog/` already exists, `vat init` shall abort with an error.
+- [x] **CMD-INIT-002** — When invoked with `vat init <prefix>`, the system shall use `<prefix>` as the project ID prefix.
+- [x] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
+- [x] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
+- [x] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
+- [x] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow. (Template baked into the binary as `readme_template::BACKLOG_README_TEMPLATE`; `vat init` renders and writes it via `readme_template::render`.)
+- [x] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
 
 ## `vat start <id>`
 
