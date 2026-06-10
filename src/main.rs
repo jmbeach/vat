@@ -227,9 +227,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::classify_exit_code;
-    use crate::errors::UserError;
     use crate::backlog_file::{SUPPORTED_MAJOR, UnsupportedVersion};
     use crate::base32::Base32Error;
+    use crate::errors::UserError;
     use crate::project_config::ConfigError;
     use crate::user_config::UserConfigError;
 
