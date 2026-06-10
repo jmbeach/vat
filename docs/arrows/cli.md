@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — last audited 2026-06-09 (git SHA `626528d`). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit code 2 (internal error) is defined in the LLD but never emitted.
+**MAPPED** — last audited 2026-06-10 (git SHA `17e8914`). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit code 2 (internal error) is defined in the LLD but never emitted.
 
 ## References
 
@@ -29,7 +29,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 **Key Components:**
 1. `src/main.rs` — top-level `Cli` struct, `Commands` enum, dispatch, error printing to stderr
-2. Leaf error types — `Base32Error`, `TombstoneError`, `UserConfigError`, `ConfigError` (thiserror-derived, in their respective modules) — these are the typed errors that clap callers match against before propagating via anyhow
+2. Leaf error types — `Base32Error`, `TombstoneError`, `UserConfigError`, `ConfigError`, `SyncError` (thiserror-derived, in their respective modules) — these are the typed errors that clap callers match against before propagating via anyhow
 
 ## Spec Coverage
 

@@ -4,7 +4,9 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-09 (git SHA `626528d`). Config commands (CMD-CFG-001 to 006) fully implemented with tests. All other commands (init, start, block, unblock, done) are stubs blocked on FMT-MARK-* from `backlog-format`.
+**PARTIAL** — last audited 2026-06-10 (git SHA `17e8914`). Config commands (CMD-CFG-001 to 006) fully implemented with tests. All other commands (init, start, block, unblock, done) are stubs blocked on FMT-MARK-* from `backlog-format`.
+
+<!-- NOTE: PRs #29 (CMD-INIT-001 to 007) and #41 (CMD-EXIT-001 to 003) in flight — update counts when merged. -->
 
 ## References
 
@@ -53,13 +55,13 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Key Findings
 
-1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 006 with inline tests. `cmd_config_get` (main.rs:124) and `cmd_config_set` (main.rs:137) are both wired and annotated.
+1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 006 with inline tests. `cmd_config_get` (main.rs:131) and `cmd_config_set` (main.rs:144) are both wired and annotated.
 
-2. **README template is ready, init wiring is not** — `src/readme_template.rs` provides the baked-in template covering CMD-INIT-006, but `cmd_init` in `main.rs:93` is a stub. The spec note says CMD-INIT-006 marker stays `[ ]` "pending `vat init` write wiring per CMD-INIT-005."
+2. **README template is ready, init wiring is not** — `src/readme_template.rs` provides the baked-in template covering CMD-INIT-006, but `cmd_init` in `main.rs:94` is a stub. The spec note says CMD-INIT-006 marker stays `[ ]` "pending `vat init` write wiring per CMD-INIT-005."
 
 3. **CMD-CC-001 implemented** — Version check on `backlog.md` reads is wired in `src/backlog_file.rs:158` (`check_version`). CMD-CC-002 (unknown ID error) and CMD-CC-003 (canonical marker emit) are gaps requiring the `find_entry` helper and marker parser.
 
-4. **init/start/block/unblock/done are stubs** — `src/main.rs:93–120` shows each as "not yet implemented". Start, block, unblock, and done all need the `find_entry` shared helper and marker manipulation, which in turn need FMT-MARK-* from `backlog-format`.
+4. **init/start/block/unblock/done are stubs** — `src/main.rs:94–129` shows each as "not yet implemented" (`vat sync` left the stub family via vat-t1h and now lives in the `sync` segment). Start, block, unblock, and done all need the `find_entry` shared helper and marker manipulation, which in turn need FMT-MARK-* from `backlog-format`.
 
 5. **CMD-EXIT-001 to 003 unformalized** — Exit codes 0 and 1 are used in practice (cmd_config and main.rs) but code 2 (internal error) has no `@spec CMD-EXIT-003` annotation anywhere and is never emitted.
 

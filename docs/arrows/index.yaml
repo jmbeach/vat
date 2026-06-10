@@ -1,5 +1,5 @@
 schema_version: 1
-last_updated: 2026-06-09
+last_updated: 2026-06-10
 
 # Taxonomy groups segments by domain cluster.
 taxonomy:
@@ -15,30 +15,30 @@ arrows:
   backlog-format:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-09
-    audited_sha: 626528d15ead2a00466e1c8857621176d491d82c
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
     blocks: [sync, commands]
     blockedBy: []
     detail: backlog-format.md
     next: "Implement marker parsing (FMT-MARK-001 to 007) and wire FMT-WS-002 serializer"
-    drift: "FMT-WS-001 spec marked [ ] but file_io.rs carries @spec annotations + tests, and cmd_config.rs already calls file_io::read_to_string — spec status may be stale"
+    drift: null
 
   sync:
-    status: MAPPED
+    status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-09
-    audited_sha: 626528d15ead2a00466e1c8857621176d491d82c
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
-    next: "Implement vat sync — blocked on FMT-MARK-* in backlog-format"
-    drift: null
+    next: "Wire ID assignment (vat-s9g, PR #20 in flight); marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format"
+    drift: "src/sync.rs carries a @spec SYNC-WRITE-001 test annotation but the spec marker is still [ ] — full idempotence pending ID assignment + marker normalization"
 
   commands:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-09
-    audited_sha: 626528d15ead2a00466e1c8857621176d491d82c
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
@@ -48,8 +48,8 @@ arrows:
   cli:
     status: MAPPED
     sampled: 2026-06-09
-    audited: 2026-06-09
-    audited_sha: 626528d15ead2a00466e1c8857621176d491d82c
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
     blocks: []
     blockedBy: []
     detail: cli.md
