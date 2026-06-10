@@ -1,5 +1,6 @@
 mod backlog_file;
 mod base32;
+mod cmd_config;
 mod file_io;
 mod item_file;
 mod project_config;
@@ -83,8 +84,8 @@ fn main() {
         Commands::Unblock { id } => cmd_unblock(id),
         Commands::Done { id } => cmd_done(id),
         Commands::Config { action } => match action {
-            ConfigAction::Get { key } => cmd_config_get(key),
-            ConfigAction::Set { key, value } => cmd_config_set(key, value),
+            ConfigAction::Get { key } => cmd_config_get(&key),
+            ConfigAction::Set { key, value } => cmd_config_set(&key, &value),
         },
     }
 }
@@ -119,12 +120,24 @@ fn cmd_done(_id: String) {
     std::process::exit(1);
 }
 
-fn cmd_config_get(_key: String) {
-    eprintln!("vat config get: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-CFG-001, CMD-CFG-002
+fn cmd_config_get(key: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    match cmd_config::get(key, backlog_dir) {
+        Ok(Some(value)) => println!("{value}"),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(1);
+        }
+    }
 }
 
-fn cmd_config_set(_key: String, _value: String) {
-    eprintln!("vat config set: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-CFG-003, CMD-CFG-004, CMD-CFG-005, CMD-CFG-006
+fn cmd_config_set(key: &str, value: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    if let Err(e) = cmd_config::set(key, value, backlog_dir) {
+        eprintln!("error: {e:#}");
+        std::process::exit(1);
+    }
 }
