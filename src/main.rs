@@ -1,6 +1,7 @@
 mod backlog_file;
 mod base32;
 mod cmd_config;
+mod cmd_init;
 mod errors;
 mod file_io;
 mod item_file;
@@ -9,6 +10,8 @@ mod readme_template;
 mod sync;
 mod tombstone;
 mod user_config;
+
+use std::io::{self, Write as _};
 
 use clap::{Parser, Subcommand};
 
@@ -92,9 +95,33 @@ fn main() {
     }
 }
 
-fn cmd_init(_prefix: Option<String>) {
-    eprintln!("vat init: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-INIT-002, CMD-INIT-003
+fn cmd_init(prefix: Option<String>) {
+    let prefix_str = prefix.unwrap_or_else(prompt_for_prefix);
+    match cmd_init::init(std::path::Path::new("."), &prefix_str) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn prompt_for_prefix() -> String {
+    print!("Project prefix (3 Crockford base32 chars): ");
+    io::stdout().flush().ok();
+    let mut input = String::new();
+    // A closed stdin (non-interactive: CI pipeline, `vat init < /dev/null`)
+    // yields Ok(0); surface that explicitly instead of silently falling
+    // through to a confusing "invalid prefix" error on the empty string.
+    match io::stdin().read_line(&mut input) {
+        Ok(0) | Err(_) => {
+            eprintln!("error: could not read prefix from stdin; try `vat init <prefix>`");
+            std::process::exit(1);
+        }
+        Ok(_) => {}
+    }
+    input.trim().to_string()
 }
 
 fn cmd_sync() {
