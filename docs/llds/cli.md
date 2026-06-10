@@ -47,12 +47,16 @@ Default clap behavior is sufficient: `vat --help`, `vat <subcmd> --help`, `vat -
 
 ## Shell completions
 
-(See backlog item `vat-k1b`. Detail to fill in when that task is designed.)
+VAT exposes completions via a hidden `vat completions <shell>` subcommand powered by [`clap_complete`](https://docs.rs/clap_complete). Supported shells: `bash`, `zsh`, `fish`.
 
-Sketch: use `clap_complete` to generate completions for bash, zsh, fish at build time or via a hidden `vat completions <shell>` subcommand. Decision deferred.
+- The subcommand is marked `#[command(hide = true)]` so it does not appear in `--help` output.
+- On invocation, completions are written to stdout; the user pipes them to the appropriate location (e.g., `vat completions bash > /etc/bash_completion.d/vat`).
+- Shell values map to `clap_complete::Shell`; unrecognised values produce clap's standard error with exit code 2.
+- The `shell` argument uses `clap_complete::Shell`'s `ValueEnum` derive so clap validates and tab-completes the shell name itself.
 
 ## Decisions & alternatives
 
 - **`thiserror` + `anyhow` split.** Leaf modules define typed errors with `thiserror` so callers can match on variants (e.g., to render a caret under a bad character); `main` uses `anyhow::Result<()>` with `.context(...)` at I/O boundaries for ergonomic propagation. Considered `anyhow`-only (loses variant matching) and `thiserror`-only with a hand-rolled top-level enum (more code, no benefit in a binary crate). Standard pattern in modern Rust CLIs.
 - **No color in v1.** Greppable output and one fewer dep. Revisit if users ask.
+- **Runtime completions subcommand, not build-time generation.** `clap_complete`'s build-time approach writes files to `OUT_DIR` during `cargo build`, requiring extra build.rs plumbing and complicating cross-compilation. A hidden runtime subcommand is simpler, self-contained, and lets release packagers run `vat completions bash` in a post-install script. Considered build-time generation (rejected: more complex, non-portable) and a top-level visible subcommand (rejected: clutters `--help` for the common case).
 - **Validation in command bodies, not in clap.** Keeps error rendering uniform — every "bad input" path goes through the same typed-error machinery rather than splitting between clap's auto-generated messages and ours.

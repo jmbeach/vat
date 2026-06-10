@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 rand = "0.8"
 serde_yaml = "0.9"
 thiserror = "1"
@@ -16,4 +17,3 @@ tempfile = "3"
 
 [lints.clippy]
 pedantic = "warn"
-

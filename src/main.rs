@@ -1,5 +1,6 @@
 mod backlog_file;
 mod base32;
+mod cmd_completions;
 mod cmd_config;
 mod cmd_init;
 mod file_io;
@@ -13,6 +14,7 @@ mod user_config;
 use std::io::{self, Write as _};
 
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 #[derive(Parser)]
 #[command(
@@ -60,6 +62,12 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Generate shell completions and write them to stdout
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -91,6 +99,8 @@ fn main() {
             ConfigAction::Get { key } => cmd_config_get(&key),
             ConfigAction::Set { key, value } => cmd_config_set(&key, &value),
         },
+        // @spec CMD-COMP-001, CMD-COMP-002, CMD-COMP-003
+        Commands::Completions { shell } => cmd_completions::run::<Cli>(shell),
     }
 }
 
