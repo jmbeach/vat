@@ -1,9 +1,5 @@
 // @spec CMD-INIT-006
 
-// Temporary: `vat init` (CMD-INIT-005) is the only consumer and is still a
-// stub, so nothing outside tests references this module yet.
-#![allow(dead_code)]
-
 /// The `backlog/README.md` template, baked into the binary at compile time.
 /// `vat init` renders it once via [`render`] and writes the result; no later
 /// command reads or rewrites it (CMD-INIT-007). The literal `{prefix}` token
