@@ -91,5 +91,5 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Line endings, whitespace, and IO normalization
 
-- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF. (Normalization infrastructure landed in `file_io`; marker stays `[ ]` pending caller wiring.)
+- [x] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF.
 - [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.

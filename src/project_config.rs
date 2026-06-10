@@ -2,6 +2,9 @@
 
 #![allow(dead_code)]
 
+use std::io;
+use std::path::{Path, PathBuf};
+
 use thiserror::Error;
 use toml::Value;
 
@@ -9,7 +12,7 @@ use crate::base32::{Base32Error, validate};
 
 const PROJECT_ID_LEN: usize = 3;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub(crate) enum ConfigError {
     #[error("malformed vat.toml: {0}")]
     Parse(String),
@@ -21,6 +24,32 @@ pub(crate) enum ConfigError {
     ProjectIdNotString,
     #[error("vat.toml [project].id is invalid: {0}; run `vat init`")]
     InvalidProjectId(#[from] Base32Error),
+    #[error("vat.toml not found at {0}; run `vat init`")]
+    NotFound(PathBuf),
+    #[error("vat.toml I/O error: {0}")]
+    Io(io::Error),
+}
+
+// `io::Error` is not `PartialEq`, so we can't derive it. Match unit variants
+// by discriminant, payload variants by value, and `Io` by `ErrorKind` — enough
+// for `assert_eq!`-style assertions in tests, matching `UserConfigError`.
+impl PartialEq for ConfigError {
+    fn eq(&self, other: &Self) -> bool {
+        use ConfigError::{
+            InvalidProjectId, Io, MissingProject, MissingProjectId, NotFound, Parse,
+            ProjectIdNotString,
+        };
+        match (self, other) {
+            (Parse(a), Parse(b)) => a == b,
+            (MissingProject, MissingProject)
+            | (MissingProjectId, MissingProjectId)
+            | (ProjectIdNotString, ProjectIdNotString) => true,
+            (InvalidProjectId(a), InvalidProjectId(b)) => a == b,
+            (NotFound(a), NotFound(b)) => a == b,
+            (Io(a), Io(b)) => a.kind() == b.kind(),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -57,6 +86,23 @@ impl ProjectConfig {
     pub(crate) fn serialize(&self) -> String {
         toml::to_string(&self.document)
             .expect("serializing toml::Value with string keys cannot fail")
+    }
+
+    pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(ConfigError::Io)?;
+        }
+        std::fs::write(path, self.serialize()).map_err(ConfigError::Io)
+    }
+}
+
+pub(crate) fn load(path: &Path) -> Result<ProjectConfig, ConfigError> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => parse(&contents),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            Err(ConfigError::NotFound(path.to_path_buf()))
+        }
+        Err(e) => Err(ConfigError::Io(e)),
     }
 }
 
@@ -199,6 +245,7 @@ mod tests {
                 expected: 3,
                 got: 4,
             }),
+            ConfigError::NotFound(std::path::PathBuf::from("backlog/vat.toml")),
         ] {
             let msg = err.to_string();
             assert!(
