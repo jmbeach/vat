@@ -1,6 +1,7 @@
 mod backlog_file;
 mod base32;
 mod cmd_config;
+mod errors;
 mod file_io;
 mod item_file;
 mod project_config;
@@ -10,13 +11,6 @@ mod tombstone;
 mod user_config;
 
 use clap::{Parser, Subcommand};
-use thiserror::Error;
-
-/// Wrapper for errors that are directly user-visible (wrong key, bad value, etc.).
-/// Causes [`classify_exit_code`] to return 1 rather than the internal-error default of 2.
-#[derive(Debug, Error)]
-#[error("{0}")]
-pub(crate) struct UserError(pub(crate) String);
 
 #[derive(Parser)]
 #[command(
@@ -163,23 +157,31 @@ fn cmd_config_set(key: &str, value: &str) {
 // (exit 2); everything else that reaches the top level is user-facing (exit 1).
 fn classify_exit_code(e: &anyhow::Error) -> i32 {
     use backlog_file::UnsupportedVersion;
+    use errors::UserError;
     use project_config::ConfigError;
     use user_config::UserConfigError;
 
     for cause in e.chain() {
+        // Matches are exhaustive on purpose: a new error variant must make an
+        // explicit exit-code choice here rather than silently inheriting one.
         if let Some(ce) = cause.downcast_ref::<ConfigError>() {
             return match ce {
-                ConfigError::Io(_) | ConfigError::Parse(_) | ConfigError::ProjectIdNotString => 2,
-                _ => 1,
+                ConfigError::Io(_) | ConfigError::Parse(_) => 2,
+                ConfigError::MissingProject
+                | ConfigError::MissingProjectId
+                | ConfigError::ProjectIdNotString
+                | ConfigError::InvalidProjectId(_)
+                | ConfigError::NotFound(_) => 1,
             };
         }
         if let Some(ue) = cause.downcast_ref::<UserConfigError>() {
             return match ue {
-                UserConfigError::Io(_)
-                | UserConfigError::Parse(_)
-                | UserConfigError::UserNotATable
-                | UserConfigError::UserNameNotString => 2,
-                _ => 1,
+                UserConfigError::Io(_) | UserConfigError::Parse(_) => 2,
+                UserConfigError::UserNotATable
+                | UserConfigError::UserNameNotString
+                | UserConfigError::UserNameEmpty
+                | UserConfigError::NotFound(_)
+                | UserConfigError::NoHome => 1,
             };
         }
         if cause.downcast_ref::<UnsupportedVersion>().is_some() {
@@ -198,7 +200,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::classify_exit_code;
-    use crate::UserError;
+    use crate::errors::UserError;
     use crate::backlog_file::{SUPPORTED_MAJOR, UnsupportedVersion};
     use crate::base32::Base32Error;
     use crate::project_config::ConfigError;
@@ -226,11 +228,11 @@ mod tests {
         assert_eq!(classify_exit_code(&e), 2);
     }
 
-    // @spec CMD-EXIT-003
+    // @spec CMD-EXIT-002
     #[test]
-    fn config_project_id_not_string_is_internal() {
+    fn config_project_id_not_string_is_user() {
         let e = anyhow(ConfigError::ProjectIdNotString);
-        assert_eq!(classify_exit_code(&e), 2);
+        assert_eq!(classify_exit_code(&e), 1);
     }
 
     // @spec CMD-EXIT-002
@@ -269,6 +271,20 @@ mod tests {
     fn user_config_parse_error_is_internal() {
         let e = anyhow(UserConfigError::Parse("bad toml".to_owned()));
         assert_eq!(classify_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn user_config_user_not_a_table_is_user() {
+        let e = anyhow(UserConfigError::UserNotATable);
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn user_config_name_not_string_is_user() {
+        let e = anyhow(UserConfigError::UserNameNotString);
+        assert_eq!(classify_exit_code(&e), 1);
     }
 
     // @spec CMD-EXIT-002
