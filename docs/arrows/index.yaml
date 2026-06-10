@@ -1,0 +1,63 @@
+schema_version: 1
+last_updated: 2026-06-10
+
+# Taxonomy groups segments by domain cluster.
+taxonomy:
+  data-layer:
+    - backlog-format
+  command-layer:
+    - sync
+    - commands
+    - cli
+
+# The graph of segments.
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
+    blocks: [sync, commands]
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Implement marker parsing (FMT-MARK-001 to 007) and wire FMT-WS-002 serializer"
+    drift: null
+
+  sync:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: sync.md
+    next: "Wire ID assignment (vat-s9g, PR #20 in flight); marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format"
+    drift: "src/sync.rs carries a @spec SYNC-WRITE-001 test annotation but the spec marker is still [ ] — full idempotence pending ID assignment + marker normalization"
+
+  commands:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: commands.md
+    next: "Implement init, start, block, unblock, done — config is done; others blocked on FMT-MARK-*"
+    drift: null
+
+  cli:
+    status: MAPPED
+    sampled: 2026-06-09
+    audited: 2026-06-10
+    audited_sha: 17e8914f3acb5d5bb3962756521a97c7d5c3ca99
+    blocks: []
+    blockedBy: []
+    detail: cli.md
+    next: "Create docs/specs/cli-specs.md and formalize exit-code wiring once commands are implemented"
+    drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
+
+# Items found during mapping that don't yet belong to a segment.
+unmapped:
+  docs:
+    llds: []
+    specs: []
