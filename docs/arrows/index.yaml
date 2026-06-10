@@ -53,7 +53,7 @@ arrows:
     blocks: []
     blockedBy: [backlog-format, cli]
     detail: sync.md
-    next: "Implement vat sync command body; all 23 active SYNC-* specs are gaps; underlying library modules (backlog_file, item_file, tombstone) are ready"
+    next: "Wire ID assignment (SYNC-ID-001..006) and marker normalization (SYNC-MARK-001..003); notes extraction complete (PR #32 vat-t1h); item-file pointer (SYNC-PTR-001..003) and SYNC-WRITE-001/003 remain"
     drift: null
 
 # Artifacts found during exploration that don't belong to a specific segment.

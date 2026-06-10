@@ -4,7 +4,7 @@
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-08 (git SHA `e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14`). All underlying library modules (`backlog_file`, `item_file`, `tombstone`, `base32`) are implemented and annotated. The `cmd_sync` body in `main.rs` is a stub ("not yet implemented"). All 23 active SYNC-* specs are active gaps; 1 is deferred.
+**PARTIAL** — last audited 2026-06-08 (git SHA `e2c7ad8cf75a7da4a970a1eedfb8b6e5784d4c14`). Notes extraction implemented in PR #32 (`vat-t1h`): SYNC-NOTES-001..005, SYNC-PRE-001..002, SYNC-WRITE-002, and SYNC-WRITE-004 are done (9 specs). Remaining gaps: ID assignment (SYNC-ID-001..006), marker normalization (SYNC-MARK-001..003), item-file pointer (SYNC-PTR-001..003), and SYNC-WRITE-001/003.
 
 ## References
 
@@ -15,13 +15,14 @@
 - docs/llds/sync.md
 
 ### EARS
-- docs/specs/sync-specs.md (24 specs: 0 implemented, 23 active gaps, 1 deferred)
+- docs/specs/sync-specs.md (24 specs: 9 implemented, 14 active gaps, 1 deferred)
 
 ### Tests
-- None yet (command not implemented)
+- src/sync.rs — 22 unit tests covering SYNC-NOTES-001..005, SYNC-PRE-001..002, SYNC-WRITE-002, SYNC-WRITE-004 (PR #32)
 
 ### Code
-- src/main.rs — `cmd_sync` stub
+- src/main.rs — `cmd_sync` wired to `sync::run` (PR #32)
+- src/sync.rs — notes extraction, `SyncOutcome`, `extract_id` (`@spec SYNC-NOTES-001..005, SYNC-PRE-001..002, SYNC-WRITE-002, SYNC-WRITE-004`)
 - src/backlog_file.rs — parse/serialize called by sync (`@spec FMT-FM-*`, `FMT-RGN-*`, `FMT-PARSE-*`)
 - src/item_file.rs — notes extraction and item file create/append (`@spec SYNC-NOTES-004`, `FMT-ITEM-001..003`)
 - src/tombstone.rs — `.used-ids` read/write (`@spec FMT-TOMB-*`)
@@ -45,13 +46,13 @@
 |----------|----------|-------------|----------|------|
 | ID assignment (SYNC-ID) | SYNC-ID-001..006 | 0 | 0 | 6 |
 | Marker normalization (SYNC-MARK) | SYNC-MARK-001..003 | 0 | 0 | 3 |
-| Notes extraction (SYNC-NOTES) | SYNC-NOTES-001..005 | 0 | 0 | 5 |
+| Notes extraction (SYNC-NOTES) | SYNC-NOTES-001..005 | 5 | 0 | 0 |
 | Item-file pointer (SYNC-PTR) | SYNC-PTR-001..003 | 0 | 0 | 3 |
-| Idempotence / writes (SYNC-WRITE) | SYNC-WRITE-001..004 | 0 | 0 | 4 |
-| Preconditions (SYNC-PRE) | SYNC-PRE-001..002 | 0 | 0 | 2 |
+| Idempotence / writes (SYNC-WRITE) | SYNC-WRITE-001..004 | 2 | 0 | 2 |
+| Preconditions (SYNC-PRE) | SYNC-PRE-001..002 | 2 | 0 | 0 |
 | Deferred | SYNC-GC-001 | — | 1 | — |
 
-**Summary:** 0 of 23 active specs implemented; 1 deferred; 23 active gaps.
+**Summary:** 9 of 23 active specs implemented; 1 deferred; 14 active gaps. (SYNC-NOTES, SYNC-PRE, SYNC-WRITE-002/004 complete via PR #32 `vat-t1h`.)
 
 ## Key Findings
 
@@ -66,11 +67,13 @@
 ## Work Required
 
 ### Must Fix
-1. Implement `cmd_sync` wiring the full algorithm from sync LLD (all SYNC-* specs)
-2. Depends on FMT-MARK-001..007 (backlog-format segment) for SYNC-MARK-001
+1. Wire ID assignment (`src/id_assignment.rs`, PR #20 `vat-s9g`) into `cmd_sync` (SYNC-ID-001..006)
+2. Implement item-file pointer suffix (SYNC-PTR-001..003)
+3. Implement remaining SYNC-WRITE gaps: SYNC-WRITE-001 and SYNC-WRITE-003
+4. Depends on FMT-MARK-001..007 (backlog-format segment) for SYNC-MARK-001
 
 ### Should Fix
-3. Add integration tests for sync idempotence (SYNC-WRITE-001..002) once the command is implemented
+5. Add integration tests for sync idempotence (SYNC-WRITE-001) once the command is fully wired
 
 ### Deferred
 - SYNC-GC-001 — orphan item file garbage collection (`vat sync --gc`)
