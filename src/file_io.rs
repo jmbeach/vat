@@ -1,12 +1,14 @@
 // @spec FMT-WS-001
 
-// Temporary: the IO layer has no callers yet; remove once a command wires it in.
-#![allow(dead_code)]
-
 use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Read a VAT-managed file and normalize all line endings to LF (FMT-WS-001).
+///
+/// This is the **single canonical read entry point** for all VAT-managed files.
+/// Every caller that reads a `.md` or config file must go through here (not raw
+/// `fs::read_to_string`) so that FMT-WS-001 is enforced at a single site.
 // @spec FMT-WS-001
 pub(crate) fn read_to_string(path: impl AsRef<Path>) -> io::Result<String> {
     let raw = fs::read_to_string(path)?;
@@ -17,7 +19,8 @@ pub(crate) fn write(path: impl AsRef<Path>, contents: &str) -> io::Result<()> {
     fs::write(path, contents)
 }
 
-fn normalize_line_endings(input: &str) -> String {
+// @spec FMT-WS-001
+pub(crate) fn normalize_line_endings(input: &str) -> String {
     if !input.contains('\r') {
         return input.to_string();
     }
