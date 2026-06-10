@@ -9,7 +9,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **SYNC-ID-001** — When `vat sync` encounters a bullet without an `[id]` marker, the system shall assign it a new ID composed of the project prefix from `vat.toml`, a literal `-`, and 3 randomly-generated Crockford base32 characters.
 - [x] **SYNC-ID-002** — When generating a new ID, the system shall reject any candidate that appears in `backlog/.used-ids` or that is currently present on another bullet in the parsed region, and retry up to 100 times.
 - [x] **SYNC-ID-003** — When ID generation exhausts its retry cap, the system shall abort with an error and shall not write to any file.
-- [ ] **SYNC-ID-004** — When `vat sync` assigns a new ID, the system shall append that ID to `backlog/.used-ids` after a successful write of `backlog.md`.
+- [x] **SYNC-ID-004** — When `vat sync` assigns a new ID, the system shall append that ID to `backlog/.used-ids` after a successful write of `backlog.md`.
 - [x] **SYNC-ID-005** — When `vat sync` encounters a bullet whose `[id]` prefix does not match the configured `project.id`, the system shall print a warning and leave the marker unchanged.
 - [x] **SYNC-ID-006** — When `vat sync` encounters two bullets sharing the same `[id]`, the system shall abort with an error and shall not write to any file.
 

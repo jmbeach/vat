@@ -7,7 +7,6 @@ mod item_file;
 mod project_config;
 mod readme_template;
 mod sync;
-mod sync_id;
 mod tombstone;
 mod user_config;
 

@@ -1,7 +1,5 @@
 // @spec SYNC-ID-001, SYNC-ID-002, SYNC-ID-003, SYNC-ID-005, SYNC-ID-006
 
-#![allow(dead_code)]
-
 use std::collections::HashSet;
 
 use thiserror::Error;
@@ -60,8 +58,8 @@ pub(crate) fn assign_ids(
     // here solely via the `used` set: the caller must pre-seed `used` with every existing
     // parsed-region ID (and all tombstones). This debug_assert documents and, in debug
     // builds, enforces that contract so a caller that forgets to seed an existing bullet's
-    // ID fails loudly here rather than silently minting a colliding ID. A covering
-    // integration test belongs with the full `vat sync` wiring (SYNC-ID-004) once it lands.
+    // ID fails loudly here rather than silently minting a colliding ID. The covering
+    // integration tests live in `sync::tests`.
     debug_assert!(
         entry_ids
             .iter()
