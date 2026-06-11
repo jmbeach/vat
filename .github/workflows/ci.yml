@@ -27,7 +27,7 @@ jobs:
             command: cargo build --all-targets --all-features --locked
             components: ""
           - task: test
-            command: cargo test --all-features --locked
+            command: cargo nextest run --all-features --locked
             components: ""
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +38,10 @@ jobs:
           components: ${{ matrix.components }}
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        if: matrix.task == 'test'
+        uses: taiki-e/install-action@nextest
 
       - name: ${{ matrix.task }}
         run: ${{ matrix.command }}
