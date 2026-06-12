@@ -56,11 +56,11 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Key Findings
 
-1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 006 with inline tests. `cmd_config_get` (main.rs:131) and `cmd_config_set` (main.rs:144) are both wired and annotated.
+1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 006 with inline tests. `cmd_config_get` (main.rs:156) and `cmd_config_set` (main.rs:169) are both wired and annotated.
 
 2. **`vat init` fully implemented** — `src/cmd_init.rs` (PR #29) implements CMD-INIT-001 to 007 with tests. The interactive-prompt path (`prompt_for_prefix()` in `main.rs`) covers CMD-INIT-003. `src/readme_template.rs` renders the baked-in template (CMD-INIT-006). `cmd_init.rs` also satisfies FMT-FM-005 by writing `"---\nversion: 1\n---\n"` to `backlog.md`.
 
-3. **CMD-CC-001 implemented** — Version check on `backlog.md` reads is wired in `src/backlog_file.rs:158` (`check_version`). CMD-CC-002 (unknown ID error) and CMD-CC-003 (canonical marker emit) are gaps requiring the `find_entry` helper and marker parser.
+3. **CMD-CC-001 implemented** — Version check on `backlog.md` reads is wired in `src/backlog_file.rs:163` (`check_version`). CMD-CC-002 (unknown ID error) and CMD-CC-003 (canonical marker emit) are gaps requiring the `find_entry` helper and marker parser.
 
 4. **start/block/unblock/done are stubs** — `src/main.rs:135–153` shows each as "not yet implemented". Start, block, unblock, and done all need the `find_entry` shared helper and marker manipulation, which in turn need FMT-MARK-* from `backlog-format`.
 
