@@ -2,9 +2,10 @@
 
 use std::path::Path;
 
-use anyhow::{Context, bail};
+use anyhow::Context;
 
 use crate::backlog_file::BacklogFile;
+use crate::errors::UserError;
 use crate::file_io;
 use crate::project_config::{self, ConfigError};
 use crate::tombstone;
@@ -42,7 +43,7 @@ fn get_impl(key: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resu
                 Err(e) => Err(anyhow::Error::from(e).context("reading vat.toml")),
             }
         }
-        _ => bail!("unknown config key: {key}"),
+        _ => Err(UserError(format!("unknown config key: {key}")).into()),
     }
 }
 
@@ -80,17 +81,18 @@ fn set_impl(
                 && ids_exist_with_prefix(&old_prefix, backlog_dir)
                     .context("checking for existing IDs")?
             {
-                bail!(
+                return Err(UserError(format!(
                     "cannot change project.id: existing IDs use prefix '{old_prefix}'; \
                      edit vat.toml directly if you need to rename the project prefix"
-                );
+                ))
+                .into());
             }
             cfg.set_project_id(&new_prefix)
                 .context("invalid project.id")?;
             cfg.save(&vat_toml).context("saving vat.toml")?;
             Ok(())
         }
-        _ => bail!("unknown config key: {key}"),
+        _ => Err(UserError(format!("unknown config key: {key}")).into()),
     }
 }
 
