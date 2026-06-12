@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — last audited 2026-06-10 (git SHA `17e8914`). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit code 2 (internal error) is defined in the LLD but never emitted.
+**MAPPED** — last audited 2026-06-11 (git SHA `017ee5f`). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit code 2 (internal error) is defined in the LLD but never emitted.
 
 ## References
 

@@ -4,7 +4,7 @@
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-10 (git SHA `17e8914`); counts updated 2026-06-10 by vat-s9g (PR #20). Notes extraction, preconditions, write-skip behavior (vat-t1h), and ID assignment (vat-s9g) are implemented. Pointer suffixes and marker normalization remain gaps; marker normalization is blocked on FMT-MARK-* from `backlog-format`.
+**PARTIAL** — last audited 2026-06-11 (git SHA `017ee5f`); counts updated 2026-06-10 by vat-s9g (PR #20). Notes extraction, preconditions, write-skip behavior (vat-t1h), and ID assignment (vat-s9g) are implemented. Pointer suffixes and marker normalization remain gaps; marker normalization is blocked on FMT-MARK-* from `backlog-format`.
 
 ## References
 
