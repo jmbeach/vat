@@ -4,6 +4,7 @@ mod cmd_config;
 mod cmd_init;
 mod errors;
 mod file_io;
+mod id_assignment;
 mod item_file;
 mod project_config;
 mod readme_template;
@@ -125,9 +126,6 @@ fn prompt_for_prefix() -> String {
 }
 
 fn cmd_sync() {
-    eprintln!(
-        "warning: vat sync is partial — ID assignment not yet wired (vat-s9g); notes are extracted but IDs are not assigned"
-    );
     let backlog_dir = std::path::Path::new("backlog");
     if let Err(e) = sync::run(backlog_dir) {
         eprintln!("vat sync: {e}");

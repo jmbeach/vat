@@ -31,7 +31,7 @@ arrows:
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
-    next: "Wire ID assignment (vat-s9g, PR #20 in flight); marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format"
+    next: "Marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format (ID assignment landed via vat-s9g, PR #20)"
     drift: "src/sync.rs carries a @spec SYNC-WRITE-001 test annotation but the spec marker is still [ ] — full idempotence pending ID assignment + marker normalization"
 
   commands:
