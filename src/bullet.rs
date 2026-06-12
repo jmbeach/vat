@@ -47,30 +47,28 @@ impl Bullet {
             }
 
             // FMT-MARK-001: [<3-char-base32>-<3-char-base32>]
-            if id.is_none() {
-                if let Some((mid, after)) = try_id(rest) {
-                    id = Some(mid);
-                    rest = after;
-                    continue;
-                }
+            if id.is_none()
+                && let Some((mid, after)) = try_id(rest)
+            {
+                id = Some(mid);
+                rest = after;
+                continue;
             }
 
             // [in-progress] literal
-            if !in_progress {
-                if let Some(after) = rest.strip_prefix("[in-progress]") {
-                    in_progress = true;
-                    rest = after;
-                    continue;
-                }
+            if !in_progress && let Some(after) = rest.strip_prefix("[in-progress]") {
+                in_progress = true;
+                rest = after;
+                continue;
             }
 
             // FMT-MARK-002: [by:<name>]
-            if by.is_none() {
-                if let Some((mby, after)) = try_by(rest) {
-                    by = Some(mby);
-                    rest = after;
-                    continue;
-                }
+            if by.is_none()
+                && let Some((mby, after)) = try_by(rest)
+            {
+                by = Some(mby);
+                rest = after;
+                continue;
             }
 
             // FMT-MARK-003 + FMT-MARK-007: [blocked-by:<id>]
@@ -321,12 +319,9 @@ mod tests {
     fn parse_out_of_order_markers_serialize_normalizes_to_canonical_order() {
         // Input has in-progress before id
         let bullet = Bullet::parse("- [in-progress] [vat-g5y] My task\n").unwrap();
-        assert_eq!(bullet.in_progress, true);
+        assert!(bullet.in_progress);
         assert_eq!(bullet.id, Some("vat-g5y".to_string()));
-        assert_eq!(
-            bullet.serialize(),
-            "- [vat-g5y] [in-progress] My task\n"
-        );
+        assert_eq!(bullet.serialize(), "- [vat-g5y] [in-progress] My task\n");
     }
 
     // @spec FMT-MARK-004
@@ -350,7 +345,10 @@ mod tests {
             s.contains("] ["),
             "should have exactly one space between adjacent markers"
         );
-        assert!(!s.contains("]  ["), "must not have double space between markers");
+        assert!(
+            !s.contains("]  ["),
+            "must not have double space between markers"
+        );
     }
 
     // @spec FMT-MARK-005
@@ -397,8 +395,7 @@ mod tests {
     #[test]
     fn parse_multiple_blocked_by_keeps_only_first() {
         let bullet =
-            Bullet::parse("- [vat-g5y] [blocked-by:vat-f1w] [blocked-by:vat-h8x] title\n")
-                .unwrap();
+            Bullet::parse("- [vat-g5y] [blocked-by:vat-f1w] [blocked-by:vat-h8x] title\n").unwrap();
         assert_eq!(bullet.blocked_by, Some("vat-f1w".to_string()));
     }
 
@@ -420,10 +417,7 @@ mod tests {
     // @spec FMT-PARSE-006
     #[test]
     fn parse_bullet_with_no_title_returns_empty_title_error() {
-        assert_eq!(
-            Bullet::parse("- [vat-g5y]\n"),
-            Err(BulletError::EmptyTitle)
-        );
+        assert_eq!(Bullet::parse("- [vat-g5y]\n"), Err(BulletError::EmptyTitle));
     }
 
     // @spec FMT-PARSE-006
@@ -478,8 +472,7 @@ mod tests {
     // @spec FMT-MARK-001, FMT-MARK-004, FMT-MARK-005
     #[test]
     fn round_trip_full_canonical_bullet() {
-        let line =
-            "- [vat-g5y] [in-progress] [by:jared] [blocked-by:vat-f1w] My task\n";
+        let line = "- [vat-g5y] [in-progress] [by:jared] [blocked-by:vat-f1w] My task\n";
         let bullet = Bullet::parse(line).unwrap();
         assert_eq!(bullet.serialize(), line);
     }
@@ -502,8 +495,7 @@ mod tests {
     #[test]
     fn round_trip_real_backlog_bullet_with_unknown_marker() {
         // [agent-ready] is unknown to VAT and becomes part of the title.
-        let line =
-            "- [vat-g5y] [agent-ready] Bullet line tokenizer (markers + title)\n";
+        let line = "- [vat-g5y] [agent-ready] Bullet line tokenizer (markers + title)\n";
         let bullet = Bullet::parse(line).unwrap();
         assert_eq!(bullet.id, Some("vat-g5y".to_string()));
         assert_eq!(
@@ -542,7 +534,7 @@ mod tests {
     fn parse_title_only_no_markers() {
         let bullet = Bullet::parse("- My task without any markers\n").unwrap();
         assert_eq!(bullet.id, None);
-        assert_eq!(bullet.in_progress, false);
+        assert!(!bullet.in_progress);
         assert_eq!(bullet.by, None);
         assert_eq!(bullet.blocked_by, None);
         assert_eq!(bullet.title, "My task without any markers");
@@ -552,17 +544,16 @@ mod tests {
     fn parse_in_progress_alone() {
         let bullet = Bullet::parse("- [in-progress] A task\n").unwrap();
         assert_eq!(bullet.id, None);
-        assert_eq!(bullet.in_progress, true);
+        assert!(bullet.in_progress);
         assert_eq!(bullet.title, "A task");
     }
 
     #[test]
     fn parse_all_markers_in_canonical_order() {
-        let line =
-            "- [vat-g5y] [in-progress] [by:alice] [blocked-by:vat-f1w] Do the thing\n";
+        let line = "- [vat-g5y] [in-progress] [by:alice] [blocked-by:vat-f1w] Do the thing\n";
         let bullet = Bullet::parse(line).unwrap();
         assert_eq!(bullet.id, Some("vat-g5y".to_string()));
-        assert_eq!(bullet.in_progress, true);
+        assert!(bullet.in_progress);
         assert_eq!(bullet.by, Some("alice".to_string()));
         assert_eq!(bullet.blocked_by, Some("vat-f1w".to_string()));
         assert_eq!(bullet.title, "Do the thing");
