@@ -44,17 +44,17 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Bullet line markers
 
-- [ ] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.
-- [ ] **FMT-MARK-002** — A bullet's `[by:<name>]` marker shall accept names matching `[A-Za-z0-9_.-]+`.
-- [ ] **FMT-MARK-003** — A bullet's `[blocked-by:<id>]` marker shall accept ids matching the same format as FMT-MARK-001.
-- [ ] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
-- [ ] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
-- [ ] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
-- [ ] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
+- [x] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.
+- [x] **FMT-MARK-002** — A bullet's `[by:<name>]` marker shall accept names matching `[A-Za-z0-9_.-]+`.
+- [x] **FMT-MARK-003** — A bullet's `[blocked-by:<id>]` marker shall accept ids matching the same format as FMT-MARK-001.
+- [x] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
+- [x] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
+- [x] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
+- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
 
 ## Empty and malformed bullets
 
-- [ ] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction.
+- [x] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction.
 
 ## Item files
 
@@ -92,4 +92,4 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 ## Line endings, whitespace, and IO normalization
 
 - [x] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF.
-- [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.
+- [x] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.
