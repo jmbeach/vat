@@ -1,13 +1,15 @@
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
 // @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
+// @spec SYNC-ID-004
 
+use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
 use thiserror::Error;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, UnsupportedVersion, check_version};
-use crate::{base32, file_io, item_file};
+use crate::{base32, file_io, id_assignment, item_file, project_config, tombstone};
 
 #[derive(Debug, Error)]
 pub(crate) enum SyncError {
@@ -17,6 +19,12 @@ pub(crate) enum SyncError {
     // @spec SYNC-PRE-002
     #[error(transparent)]
     Version(#[from] UnsupportedVersion),
+    #[error(transparent)]
+    Config(#[from] project_config::ConfigError),
+    #[error(transparent)]
+    IdAssignment(#[from] id_assignment::IdAssignmentError),
+    #[error(transparent)]
+    Tombstone(#[from] tombstone::TombstoneError),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -46,7 +54,14 @@ struct PendingWrite {
     stripped: String,
 }
 
-/// Run the notes-extraction step of `vat sync`.
+/// Run the ID-assignment and notes-extraction steps of `vat sync`.
+///
+/// ID assignment (delegated to [`id_assignment::assign_ids`]):
+/// - Every non-empty bullet without an `[id]` marker gets a fresh
+///   `<prefix>-<3 base32 chars>` ID inserted at the front of the bullet
+///   (SYNC-ID-001..003, 005, 006).
+/// - Newly-assigned IDs are appended to `backlog/.used-ids` only after
+///   `backlog.md` has been written successfully (SYNC-ID-004).
 ///
 /// For each task entry that has note lines:
 /// - Strips indentation (SYNC-NOTES-004) and trims blank edges.
@@ -62,14 +77,20 @@ struct PendingWrite {
 /// `backlog/items/` on demand via `item_file::write_new_stripped` (SYNC-WRITE-004).
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
 // @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
+// @spec SYNC-ID-004
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let backlog_path = backlog_dir.join("backlog.md");
     let items_dir = backlog_dir.join("items");
+    let used_ids_path = backlog_dir.join(".used-ids");
 
     // SYNC-PRE-001: backlog.md must exist.
     if !backlog_path.exists() {
         return Err(SyncError::NoBacklog);
     }
+
+    // LLD step 1: load project config up front; fail loudly when vat.toml is
+    // missing or invalid. ID generation needs `project.id` as the prefix.
+    let config = project_config::load(&backlog_dir.join("vat.toml"))?;
 
     let input = file_io::read_to_string(&backlog_path)?;
     let bf = BacklogFile::parse(&input);
@@ -78,6 +99,56 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     check_version(bf.frontmatter())?;
 
     let mut region = ParsedRegion::parse(bf.parsed());
+
+    // One ID slot per assignable entry. Empty bullets (`- ` with no body) are
+    // skipped per the LLD's edge behavior: no ID is assigned and the line is
+    // preserved in place. Existing IDs are lowercased here: tombstones are
+    // lowercase-normalized on read, and the prefix comparison in
+    // `assign_ids` (SYNC-ID-005) is against the lowercase `project.id`.
+    // Slots with existing IDs are never written back to the bullet line, so
+    // the normalization does not rewrite the user's casing.
+    let mut slots: Vec<Option<String>> = Vec::new();
+    let mut slot_entry: Vec<usize> = Vec::new();
+    for (i, entry) in region.entries.iter().enumerate() {
+        let body = entry.bullet_line.strip_prefix("- ").unwrap_or("");
+        if body.trim().is_empty() {
+            continue;
+        }
+        slots.push(extract_id(entry.bullet_line).map(str::to_ascii_lowercase));
+        slot_entry.push(i);
+    }
+
+    // SYNC-ID-002: collision avoidance against tombstones ∪ IDs already
+    // present in the parsed region.
+    let mut used = tombstone::read(&used_ids_path)?;
+    for id in slots.iter().flatten() {
+        used.insert(id.clone());
+    }
+
+    let needs_id: Vec<usize> = slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, slot)| slot.is_none().then_some(i))
+        .collect();
+
+    let (new_ids, warnings) = id_assignment::assign_ids(
+        &mut slots,
+        &mut used,
+        config.project_id(),
+        &mut rand::thread_rng(),
+    )?;
+    for warning in &warnings {
+        eprintln!("{warning}");
+    }
+
+    // Entry index → newly-assigned ID, for splicing the marker into the
+    // bullet line on serialize. `assign_ids` fills the `None` slots in entry
+    // order, so `needs_id` (the pre-call `None` positions) zips with `new_ids`.
+    let inserted: HashMap<usize, &str> = needs_id
+        .iter()
+        .zip(&new_ids)
+        .map(|(&slot_idx, id)| (slot_entry[slot_idx], id.as_str()))
+        .collect();
 
     // Collect all item-file writes before touching any file.  A scan-phase
     // error (e.g. disk full) therefore leaves disk state unchanged: no item
@@ -89,9 +160,14 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     // Truly atomic cross-file writes require OS support that is out of scope.
     let mut pending: Vec<PendingWrite> = Vec::new();
 
-    for entry in &mut region.entries {
+    for (i, entry) in region.entries.iter_mut().enumerate() {
         let notes: String = entry.notes.to_owned();
-        let id: Option<String> = extract_id(entry.bullet_line).map(str::to_owned);
+        // A bullet that just received an ID extracts its notes to that ID's
+        // item file (LLD step 5: assignment happens before extraction).
+        let id: Option<String> = inserted
+            .get(&i)
+            .map(|id| (*id).to_owned())
+            .or_else(|| extract_id(entry.bullet_line).map(str::to_owned));
 
         if !notes.is_empty() {
             let stripped = item_file::strip_notes(&notes);
@@ -110,7 +186,21 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
         entry.notes = "";
     }
 
-    let new_parsed = region.serialize();
+    // Serialize, splicing each newly-assigned ID marker in at the front of
+    // its bullet (SYNC-ID-001: `[id]` comes before any other markers).
+    let mut new_parsed = String::with_capacity(bf.parsed().len() + 8 * inserted.len());
+    new_parsed.push_str(region.preamble);
+    for (i, entry) in region.entries.iter().enumerate() {
+        if let Some(id) = inserted.get(&i) {
+            new_parsed.push_str("- [");
+            new_parsed.push_str(id);
+            new_parsed.push_str("] ");
+            new_parsed.push_str(&entry.bullet_line[2..]);
+        } else {
+            new_parsed.push_str(entry.bullet_line);
+        }
+        new_parsed.push_str(entry.notes);
+    }
     let output = bf.serialize(&new_parsed);
 
     // SYNC-WRITE-002: skip write when byte-identical.
@@ -143,6 +233,12 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
 
     // Step B: write backlog.md.
     file_io::write(&backlog_path, &output)?;
+
+    // SYNC-ID-004: append newly-assigned IDs to .used-ids only after the
+    // backlog.md write succeeded. An empty batch is a no-op in `append`.
+    let new_id_refs: Vec<&str> = new_ids.iter().map(String::as_str).collect();
+    tombstone::append(&used_ids_path, &new_id_refs)?;
+
     Ok(SyncOutcome::Wrote)
 }
 
@@ -180,8 +276,13 @@ mod tests {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    /// Tempdir acting as `backlog/`, with a `vat.toml` declaring project id
+    /// `vat` (run loads it up front; ID generation needs the prefix).
     fn setup() -> TempDir {
-        tempfile::tempdir().expect("tempdir")
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("vat.toml"), "[project]\nid = \"vat\"\n")
+            .expect("write vat.toml");
+        dir
     }
 
     /// Write `backlog.md` into `dir/`.
@@ -453,18 +554,166 @@ mod tests {
         );
     }
 
-    // ── Bullet without ID ─────────────────────────────────────────────────────
+    // ── ID assignment (SYNC-ID-001..006) ─────────────────────────────────────
+
+    /// Extract the assigned `vat-xxx` id from a bullet line like
+    /// `- [vat-xxx] Title`.
+    fn assigned_id(line: &str) -> &str {
+        let start = line.find("[vat-").expect("line has a [vat- id") + 1;
+        let end = line[start..].find(']').expect("id marker closed") + start;
+        &line[start..end]
+    }
+
+    // @spec SYNC-ID-001
+    #[test]
+    fn run_assigns_id_to_bullet_without_one() {
+        let dir = setup();
+        write_backlog(&dir, "- A task without an id\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let line = out.lines().next().unwrap();
+        assert!(
+            line.starts_with("- [vat-"),
+            "id with project prefix inserted at front: {line:?}"
+        );
+        assert!(
+            line.ends_with("] A task without an id"),
+            "title preserved after the marker: {line:?}"
+        );
+        let id = assigned_id(line);
+        assert_eq!(id.len(), "vat-".len() + 3, "3-char base32 suffix: {id:?}");
+    }
+
+    // @spec SYNC-ID-001
+    #[test]
+    fn run_assigns_id_before_existing_markers() {
+        let dir = setup();
+        write_backlog(&dir, "- [in-progress] Claimed but unid'd task\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let line = out.lines().next().unwrap();
+        assert!(
+            line.starts_with("- [vat-"),
+            "new id goes before other markers: {line:?}"
+        );
+        assert!(line.contains("[in-progress] Claimed but unid'd task"));
+    }
+
+    // @spec SYNC-ID-004
+    #[test]
+    fn run_appends_newly_assigned_ids_to_used_ids() {
+        let dir = setup();
+        write_backlog(&dir, "- First new task\n- Second new task\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let tombstones = fs::read_to_string(dir.path().join(".used-ids")).unwrap();
+        for line in out.lines() {
+            let id = assigned_id(line);
+            assert!(
+                tombstones.lines().any(|t| t == id),
+                "assigned id {id:?} must be in .used-ids: {tombstones:?}"
+            );
+        }
+        assert_eq!(tombstones.lines().count(), 2, "one line per new id");
+    }
+
+    // @spec SYNC-ID-004
+    #[test]
+    fn run_does_not_touch_used_ids_when_no_ids_were_assigned() {
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h] Already id'd\n  a note\n");
+        run(dir.path()).unwrap();
+        assert!(
+            !dir.path().join(".used-ids").exists(),
+            "no new ids → .used-ids untouched"
+        );
+    }
+
+    // @spec SYNC-ID-002
+    #[test]
+    fn run_does_not_reuse_tombstoned_or_existing_ids() {
+        let dir = setup();
+        fs::write(dir.path().join(".used-ids"), "vat-aaa\n").unwrap();
+        write_backlog(&dir, "- [vat-bbb] Existing\n- Needs an id\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let new_line = out.lines().nth(1).unwrap();
+        let id = assigned_id(new_line);
+        assert_ne!(id, "vat-aaa", "tombstoned id must not be reused");
+        assert_ne!(id, "vat-bbb", "existing bullet id must not be reused");
+    }
+
+    // @spec SYNC-ID-005
+    #[test]
+    fn run_leaves_foreign_prefix_id_unchanged() {
+        let dir = setup();
+        let content = "- [bar-7k2] Imported from another project\n";
+        write_backlog(&dir, content);
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), content);
+        assert!(!dir.path().join(".used-ids").exists());
+    }
+
+    // @spec SYNC-ID-006
+    #[test]
+    fn run_aborts_on_duplicate_ids_without_writing_anything() {
+        let dir = setup();
+        let content = "- [vat-abc] First\n  a note\n- [vat-abc] Duplicate\n- New task\n";
+        write_backlog(&dir, content);
+        let err = run(dir.path()).unwrap_err();
+        assert!(
+            matches!(err, SyncError::IdAssignment(_)),
+            "expected duplicate-id error, got {err}"
+        );
+        assert_eq!(read_backlog(&dir), content, "backlog.md untouched");
+        assert!(!dir.path().join("items").exists(), "no item files written");
+        assert!(
+            !dir.path().join(".used-ids").exists(),
+            "no tombstones appended on error"
+        );
+    }
+
+    // ── vat.toml precondition (LLD step 1) ────────────────────────────────────
 
     #[test]
-    fn run_clears_notes_for_bullet_without_id_and_does_not_create_item_file() {
+    fn run_errors_when_vat_toml_missing() {
+        let dir = tempfile::tempdir().expect("tempdir"); // no vat.toml
+        fs::write(dir.path().join("backlog.md"), "- [vat-t1h] Title\n").unwrap();
+        let err = run(dir.path()).unwrap_err();
+        assert!(
+            matches!(err, SyncError::Config(_)),
+            "expected config error, got {err}"
+        );
+    }
+
+    // ── Empty bullet is skipped for ID assignment ─────────────────────────────
+
+    #[test]
+    fn run_does_not_assign_id_to_empty_bullet() {
+        let dir = setup();
+        let content = "- \n";
+        write_backlog(&dir, content);
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), content, "empty bullet preserved as-is");
+        assert!(!dir.path().join(".used-ids").exists());
+    }
+
+    // ── Bullet without ID, with notes ─────────────────────────────────────────
+
+    // @spec SYNC-ID-001, SYNC-NOTES-002
+    #[test]
+    fn run_extracts_notes_of_unid_bullet_to_its_new_item_file() {
         let dir = setup();
         write_backlog(&dir, "- No id on this bullet\n  A note.\n");
         run(dir.path()).unwrap();
-        // No item file created (no ID to name it with).
-        assert!(!dir.path().join("items").exists());
-        // Notes still cleared.
         let out = read_backlog(&dir);
-        assert_eq!(out, "- No id on this bullet\n");
+        let line = out.lines().next().unwrap();
+        let id = assigned_id(line);
+        // Notes were cleared and moved to the freshly-assigned id's item file.
+        assert_eq!(out, format!("{line}\n"));
+        let item_path = dir.path().join("items").join(format!("{id}.md"));
+        let contents = fs::read_to_string(&item_path).expect("item file for new id");
+        assert!(contents.contains("A note."));
     }
 
     // ── Idempotence ───────────────────────────────────────────────────────────

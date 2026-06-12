@@ -1,4 +1,4 @@
-// @spec CMD-INIT-001, CMD-INIT-002, CMD-INIT-004, CMD-INIT-005, CMD-INIT-006, CMD-INIT-007
+// @spec CMD-INIT-001, CMD-INIT-002, CMD-INIT-004, CMD-INIT-005, CMD-INIT-006, CMD-INIT-007, FMT-FM-005
 
 use std::fs;
 use std::io;
@@ -25,7 +25,7 @@ pub(crate) enum InitError {
 /// `prefix` is the already-resolved 3-char Crockford base32 prefix (either
 /// from the CLI arg or from the interactive prompt in the caller). Validation
 /// is delegated to `ProjectConfig::new`.
-// @spec CMD-INIT-001, CMD-INIT-002, CMD-INIT-004, CMD-INIT-005, CMD-INIT-006
+// @spec CMD-INIT-001, CMD-INIT-002, CMD-INIT-004, CMD-INIT-005, CMD-INIT-006, FMT-FM-005
 pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitError> {
     let backlog_dir = project_root.join("backlog");
 
@@ -58,7 +58,7 @@ pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitErro
 /// Split out from `init` so that a write failure partway through can be
 /// cleaned up by the caller (removing the half-populated directory) rather
 /// than leaving the user stuck behind the `AlreadyInitialized` guard.
-// @spec CMD-INIT-005, CMD-INIT-006
+// @spec CMD-INIT-005, CMD-INIT-006, FMT-FM-005
 fn write_backlog_files(
     backlog_dir: &Path,
     config: &ProjectConfig,

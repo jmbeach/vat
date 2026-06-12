@@ -1,8 +1,5 @@
 // @spec FMT-TOMB-001, FMT-TOMB-002, FMT-TOMB-003, FMT-TOMB-004, FMT-TOMB-005, FMT-TOMB-006, FMT-TOMB-007, FMT-TOMB-008, FMT-TOMB-009
 
-// TODO: remove once a command wires this module in (vat sync / vat done).
-#![allow(dead_code)]
-
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};

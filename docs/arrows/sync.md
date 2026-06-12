@@ -4,9 +4,7 @@
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-10 (git SHA `17e8914`). Notes extraction, preconditions, and write-skip behavior are implemented (`src/sync.rs`, landed via vat-t1h). ID assignment (vat-s9g, PR #20 in flight), pointer suffixes, and marker normalization remain gaps; marker normalization is blocked on FMT-MARK-* from `backlog-format`.
-
-<!-- NOTE: PR #20 (SYNC-ID-001/002/003/005/006) in flight — update counts when merged. -->
+**PARTIAL** — last audited 2026-06-11 (git SHA `017ee5f`); counts updated 2026-06-10 by vat-s9g (PR #20). Notes extraction, preconditions, write-skip behavior (vat-t1h), and ID assignment (vat-s9g) are implemented. Pointer suffixes and marker normalization remain gaps; marker normalization is blocked on FMT-MARK-* from `backlog-format`.
 
 ## References
 
@@ -17,18 +15,20 @@
 - docs/llds/sync.md
 
 ### EARS
-- docs/specs/sync-specs.md (23 active specs: 9 implemented, 14 gaps; 1 deferred)
+- docs/specs/sync-specs.md (23 active specs: 15 implemented, 8 gaps; 1 deferred)
 
 ### Tests
-- src/sync.rs (inline `#[cfg(test)]` — 25 tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/004)
+- src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/004, SYNC-ID-001/002/004/005/006)
+- src/id_assignment.rs (inline `#[cfg(test)]` — unit tests covering SYNC-ID-001/002/003/005/006)
 - src/item_file.rs (inline `#[cfg(test)]` — SYNC-NOTES-004 indentation stripping)
 
 ### Code
-- src/sync.rs — sync engine: notes extraction, preconditions, write-skip (SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-002/004)
-- src/main.rs:99 — `cmd_sync` dispatches to `sync::run` with a partial-implementation warning (ID assignment not wired, vat-s9g)
+- src/sync.rs — sync engine: ID assignment wiring, notes extraction, preconditions, write-skip, tombstone append (SYNC-ID-004, SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-002/004)
+- src/id_assignment.rs — ID generation/validation core (SYNC-ID-001/002/003/005/006)
+- src/main.rs — `cmd_sync` dispatches to `sync::run`
 - src/item_file.rs — SYNC-NOTES-004 infrastructure (notes indentation stripping + item file create/append)
-- src/base32.rs — ID generation primitives (needed for SYNC-ID-001)
-- src/tombstone.rs — ID collision avoidance (needed for SYNC-ID-002)
+- src/base32.rs — ID generation primitives (used by SYNC-ID-001)
+- src/tombstone.rs — .used-ids read/append (SYNC-ID-002 collision set, SYNC-ID-004 append)
 - src/backlog_file.rs — parsed-region parse/serialize (marker parsing from FMT-MARK-* still required)
 
 ## Architecture
@@ -37,7 +37,7 @@
 
 **Key Components:**
 1. `src/sync.rs` — sync engine: `run()` orchestrates preconditions, notes extraction, and write-skip
-2. `src/main.rs:cmd_sync` — entry point; dispatches to `sync::run` (emits partial-implementation warning)
+2. `src/main.rs:cmd_sync` — entry point; dispatches to `sync::run`
 3. `src/item_file.rs` — item file create/append and SYNC-NOTES-004 indentation stripping
 4. `src/base32.rs` — random ID generation for SYNC-ID-001
 5. `src/tombstone.rs` — tombstone read/append for SYNC-ID-002 collision avoidance
@@ -47,7 +47,7 @@
 
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
-| ID assignment | SYNC-ID-001 to 006 | 0 | 0 | 6 |
+| ID assignment | SYNC-ID-001 to 006 | 6 | 0 | 0 |
 | Marker normalization | SYNC-MARK-001 to 003 | 0 | 0 | 3 |
 | Notes extraction | SYNC-NOTES-001 to 005 | 5 | 0 | 0 |
 | Item-file pointer suffix | SYNC-PTR-001 to 003 | 0 | 0 | 3 |
@@ -55,13 +55,13 @@
 | Preconditions | SYNC-PRE-001 to 002 | 2 | 0 | 0 |
 | Deferred | SYNC-GC-001 | 0 | 1 | 0 |
 
-**Summary:** 9 of 23 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). Notes extraction (vat-t1h) landed the engine; remaining gaps are ID assignment (vat-s9g, PR #20 in flight), pointer suffixes, and marker normalization.
+**Summary:** 15 of 23 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). Notes extraction (vat-t1h) landed the engine and ID assignment (vat-s9g) is wired into it; remaining gaps are pointer suffixes and marker normalization.
 
 ## Key Findings
 
-1. **Notes extraction implemented** — `src/sync.rs` (landed via vat-t1h, PR #32) implements SYNC-NOTES-001 to 005, SYNC-PRE-001/002, and SYNC-WRITE-002/004 with 25 inline tests. `cmd_sync` (`src/main.rs:99`) dispatches to `sync::run` and warns that the command is partial.
+1. **Notes extraction implemented** — `src/sync.rs` (landed via vat-t1h, PR #32) implements SYNC-NOTES-001 to 005, SYNC-PRE-001/002, and SYNC-WRITE-002/004 with inline tests. `cmd_sync` dispatches to `sync::run`.
 
-2. **ID assignment not wired** — SYNC-ID-001 to 006 remain gaps (tracked as vat-s9g; PR #20 in flight covers SYNC-ID-001/002/003/005/006). The primitives (`src/base32.rs`, `src/tombstone.rs`) are ready.
+2. **ID assignment implemented** — SYNC-ID-001 to 006 (vat-s9g, PR #20): `src/id_assignment.rs` holds the generation/validation core; `sync::run` seeds the collision set from `.used-ids` plus existing region IDs, splices new `[id]` markers in at the front of unid'd bullets, and appends new IDs to `.used-ids` only after a successful `backlog.md` write (SYNC-ID-004).
 
 3. **SYNC-WRITE-001 drift signal** — `src/sync.rs` carries a `@spec SYNC-WRITE-001` test annotation (`run_is_idempotent`), but the spec marker is still `[ ]`. Full idempotence per the spec ("all bullets ID'd, canonical marker order") can't hold until ID assignment and marker normalization land; the test covers the implemented subset only.
 
@@ -70,6 +70,5 @@
 ## Work Required
 
 ### Must Fix
-1. Wire ID assignment (SYNC-ID-001 to 006) into `sync::run` — vat-s9g; PR #20 in flight.
-2. Implement marker normalization (SYNC-MARK-001 to 003) and pointer suffixes (SYNC-PTR-001 to 003) once `backlog-format` delivers FMT-MARK-001 to 007.
-3. Implement SYNC-WRITE-003 (all-or-nothing writes on error) and flip SYNC-WRITE-001 once full idempotence holds.
+1. Implement marker normalization (SYNC-MARK-001 to 003) and pointer suffixes (SYNC-PTR-001 to 003) once `backlog-format` delivers FMT-MARK-001 to 007.
+2. Implement SYNC-WRITE-003 (all-or-nothing writes on error) and flip SYNC-WRITE-001 once full idempotence holds.
