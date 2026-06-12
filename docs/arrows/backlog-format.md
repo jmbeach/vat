@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-10 (git SHA `17e8914`). Core parsing fully implemented across 7 modules. FMT-MARK-* (bullet marker parsing) is the largest gap and blocks both `sync` and the bullet-mutating commands.
+**PARTIAL** — last audited 2026-06-11 (git SHA `017ee5f`). Core parsing fully implemented across 7 modules. FMT-FM-005 now implemented (cmd_init.rs, PR #29). FMT-MARK-* (bullet marker parsing) is the largest gap and blocks both `sync` and the bullet-mutating commands.
 
 ## References
 
@@ -15,7 +15,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - docs/llds/backlog-format.md
 
 ### EARS
-- docs/specs/backlog-format-specs.md (55 active specs: 45 implemented, 10 gaps)
+- docs/specs/backlog-format-specs.md (55 active specs: 46 implemented, 9 gaps)
 
 ### Tests
 - src/backlog_file.rs (inline `#[cfg(test)]`)
@@ -52,7 +52,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
-| Frontmatter | FMT-FM-001 to 005 | 4 | 0 | 1 |
+| Frontmatter | FMT-FM-001 to 005 | 5 | 0 | 0 |
 | Body regions | FMT-RGN-001 to 007 | 7 | 0 | 0 |
 | Parsed region structure | FMT-PARSE-001 to 006 | 5 | 0 | 1 |
 | Crockford base32 | FMT-B32-001 to 007 | 7 | 0 | 0 |
@@ -63,7 +63,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 | User config | FMT-USR-001 to 006 | 6 | 0 | 0 |
 | Line endings / WS | FMT-WS-001 to 002 | 1 | 0 | 1 |
 
-**Summary:** 45 of 55 active specs implemented; 0 deferred; 10 gaps. FMT-MARK-* (7 specs) is the largest gap and the primary blocker for other segments.
+**Summary:** 46 of 55 active specs implemented; 0 deferred; 9 gaps. FMT-MARK-* (7 specs) is the largest gap and the primary blocker for other segments.
 
 ## Key Findings
 
@@ -71,7 +71,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 2. **FMT-WS-001 implemented** — The earlier drift signal is resolved: `vat sync` (vat-t1h, PR #32) reads `backlog.md` through `file_io::read_to_string`, completing the caller wiring, and the spec marker flipped to `[x]`. `src/file_io.rs` carries the `@spec FMT-WS-001` annotations and tests.
 
-3. **FMT-FM-005 deferred** — The spec for `vat init` writing `version: 1` frontmatter is unimplemented; `cmd_init` in `main.rs` is a stub. This will land when the `commands` segment implements `vat init`.
+3. **FMT-FM-005 implemented** — `cmd_init.rs:write_backlog_files` (PR #29) writes `"---\nversion: 1\n---\n"` to `backlog.md`, satisfying this spec. `@spec FMT-FM-005` annotation added to `src/cmd_init.rs`.
 
 4. **FMT-PARSE-006 gap** — Empty/malformed bullet warning behavior not implemented. `src/backlog_file.rs` parses entries but has no warning path for empty bullets.
 
@@ -86,5 +86,3 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 2. Wire FMT-WS-002: strip trailing whitespace in bullet serializer (backlog_file.rs serialize path).
 3. Implement FMT-PARSE-006: empty-bullet warning in the parsed-region parser.
 
-### Nice to Have
-4. FMT-FM-005 lands naturally as part of `vat init` in the commands segment.
