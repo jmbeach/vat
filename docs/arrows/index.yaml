@@ -1,5 +1,5 @@
 schema_version: 1
-last_updated: 2026-06-11
+last_updated: 2026-06-12
 
 # Taxonomy groups segments by domain cluster.
 taxonomy:
@@ -15,8 +15,8 @@ arrows:
   backlog-format:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-11
-    audited_sha: 017ee5f05244113e3147c1a052dd6ba76bb0217b
+    audited: 2026-06-12
+    audited_sha: 9dbd445
     blocks: [sync, commands]
     blockedBy: []
     detail: backlog-format.md
@@ -26,8 +26,8 @@ arrows:
   sync:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-11
-    audited_sha: 017ee5f05244113e3147c1a052dd6ba76bb0217b
+    audited: 2026-06-12
+    audited_sha: 9dbd445
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
@@ -37,23 +37,23 @@ arrows:
   commands:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-11
-    audited_sha: 017ee5f05244113e3147c1a052dd6ba76bb0217b
+    audited: 2026-06-12
+    audited_sha: 9dbd445
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
-    next: "Implement start, block, unblock, done — init and config are done; others blocked on FMT-MARK-*"
-    drift: null
+    next: "Implement start, block, unblock, done — blocked on FMT-MARK-*. Exit codes (CMD-EXIT-001..003) implemented for cmd_config; thread classify_exit_code through cmd_init/cmd_sync."
+    drift: "classify_exit_code() wired only through cmd_config_get/cmd_config_set; cmd_init and cmd_sync still exit 1 for all errors. CMD-EXIT-003 ([x]) requires every command to route through classification."
 
   cli:
     status: MAPPED
     sampled: 2026-06-09
-    audited: 2026-06-11
-    audited_sha: 017ee5f05244113e3147c1a052dd6ba76bb0217b
+    audited: 2026-06-12
+    audited_sha: 9dbd445
     blocks: []
     blockedBy: []
     detail: cli.md
-    next: "Create docs/specs/cli-specs.md and formalize exit-code wiring once commands are implemented"
+    next: "Create docs/specs/cli-specs.md to formalize CLI behavioral requirements (argument parsing, error rendering, exit codes)"
     drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
 
 # Items found during mapping that don't yet belong to a segment.

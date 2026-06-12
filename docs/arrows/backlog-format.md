@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-11 (git SHA `017ee5f`). Core parsing fully implemented across 7 modules. FMT-FM-005 now implemented (cmd_init.rs, PR #29). FMT-MARK-* (bullet marker parsing) is the largest gap and blocks both `sync` and the bullet-mutating commands.
+**PARTIAL** — last audited 2026-06-12 (git SHA `9dbd445`). Core parsing fully implemented across 7 modules. FMT-FM-005 now implemented (cmd_init.rs, PR #29). FMT-MARK-* (bullet marker parsing) is the largest gap and blocks both `sync` and the bullet-mutating commands.
 
 ## References
 
