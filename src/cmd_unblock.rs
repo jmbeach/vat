@@ -5,7 +5,6 @@ use std::path::Path;
 use anyhow::Context;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, check_version};
-use crate::bullet::Bullet;
 use crate::cmd_start::{EntryLookup, find_entry_index, serialize_region_with_replaced_bullet};
 use crate::errors::UserError;
 use crate::file_io;
@@ -16,8 +15,12 @@ use crate::file_io;
 // @spec CMD-UNBLOCK-001, CMD-UNBLOCK-002
 pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     let backlog_path = backlog_dir.join("backlog.md");
+    // A missing or unreadable backlog.md is a user-facing condition (vat not
+    // initialized here, or the wrong directory), so surface it as a UserError;
+    // classify_exit_code then maps it to exit 1, matching `vat sync`/`vat init`
+    // rather than the internal-error exit 2.
     let input = file_io::read_to_string(&backlog_path)
-        .with_context(|| format!("reading {}", backlog_path.display()))?;
+        .map_err(|e| UserError(format!("reading {}: {e}", backlog_path.display())))?;
 
     let bf = BacklogFile::parse(&input);
 
@@ -30,8 +33,8 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     // CMD-CC-002 / CMD-CC-004: locate the matching entry; abort without writes
     // if not found, or with the parse failure if the bullet is present but
     // malformed.
-    let entry_idx = match find_entry_index(&region, &id_lower) {
-        EntryLookup::Found(idx) => idx,
+    let (entry_idx, mut bullet) = match find_entry_index(&region, &id_lower) {
+        EntryLookup::Found(idx, bullet) => (idx, bullet),
         EntryLookup::Malformed(err) => {
             return Err(UserError(format!(
                 "{id} found but its bullet could not be parsed: {err}"
@@ -41,14 +44,13 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
         EntryLookup::NotFound => return Err(UserError(format!("unknown id: {id}")).into()),
     };
 
-    let mut bullet = Bullet::parse(region.entries[entry_idx].bullet_line)
-        .expect("entry bullet must parse: find_entry_index only returns parsable entries");
-
     // CMD-UNBLOCK-001: no blocker → no-op success, leaving the file untouched.
     // We return before any write so the bullet's existing spacing/casing is not
-    // re-serialized (which would otherwise count as a modification).
+    // re-serialized (which would otherwise count as a modification). The message
+    // is distinct from the real-unblock confirmation below so a caller — human
+    // or script — can tell whether a marker was actually removed.
     if bullet.blocked_by.is_none() {
-        return Ok(format!("unblocked {id_lower}"));
+        return Ok(format!("{id_lower} is not blocked"));
     }
 
     // CMD-UNBLOCK-002 + CMD-CC-003: drop the marker and re-serialize through the
@@ -61,7 +63,7 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     let new_parsed = serialize_region_with_replaced_bullet(&region, entry_idx, &new_bullet_line);
     let output = bf.serialize(&new_parsed);
     file_io::write(&backlog_path, &output)
-        .with_context(|| format!("writing {}", backlog_path.display()))?;
+        .map_err(|e| UserError(format!("writing {}: {e}", backlog_path.display())))?;
 
     Ok(format!("unblocked {id_lower}"))
 }
@@ -235,9 +237,29 @@ mod tests {
         write_backlog(&backlog, &original);
 
         let msg = run("vat-g5y", &backlog).unwrap();
-        assert_eq!(msg, "unblocked vat-g5y");
+        // The no-op message is distinct from the real-unblock confirmation so a
+        // caller can tell nothing was removed.
+        assert_eq!(msg, "vat-g5y is not blocked");
         // CMD-UNBLOCK-001: the file must be byte-for-byte unchanged.
         assert_eq!(read_backlog(&backlog), original);
+    }
+
+    // The no-op and real-unblock paths must report distinguishable outcomes.
+    // @spec CMD-UNBLOCK-001, CMD-UNBLOCK-002
+    #[test]
+    fn unblock_distinguishes_noop_from_real_unblock() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_backlog(
+            &backlog,
+            &format!("{HEADER}- [vat-g5y] [blocked-by:vat-f1w] Blocked\n- [vat-h8x] Free\n"),
+        );
+
+        let removed = run("vat-g5y", &backlog).unwrap();
+        let noop = run("vat-h8x", &backlog).unwrap();
+        assert_eq!(removed, "unblocked vat-g5y");
+        assert_eq!(noop, "vat-h8x is not blocked");
+        assert_ne!(removed, noop, "outcomes must be distinguishable");
     }
 
     // @spec CMD-UNBLOCK-001
@@ -334,6 +356,26 @@ mod tests {
         assert!(
             msg.contains("version") || msg.contains("upgrade"),
             "expected version error: {msg}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Exit-code classification — backlog IO is user-facing (exit 1)
+    // -----------------------------------------------------------------------
+
+    // A missing/unreadable backlog.md must classify as a user error (exit 1),
+    // not the internal-error exit 2. The error surfaces as a UserError, which
+    // is what classify_exit_code maps to 1.
+    // @spec CMD-EXIT-002
+    #[test]
+    fn unblock_missing_backlog_is_a_user_error() {
+        let dir = TempDir::new().unwrap();
+        let backlog = dir.path().join("backlog"); // never created
+
+        let err = run("vat-g5y", &backlog).unwrap_err();
+        assert!(
+            err.downcast_ref::<crate::errors::UserError>().is_some(),
+            "missing backlog should surface as a UserError (exit 1): {err:#}"
         );
     }
 }
