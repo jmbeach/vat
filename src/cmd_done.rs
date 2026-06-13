@@ -130,24 +130,12 @@ mod tests {
 
     use super::run;
     use crate::backlog_file::SUPPORTED_MAJOR;
+    use crate::test_support::{HEADER, make_backlog_dir, read_backlog, write_backlog};
 
     // -----------------------------------------------------------------------
-    // Helpers
+    // Helpers (shared ones live in `crate::test_support`; the item-file and
+    // used-ids helpers below are `done`-specific)
     // -----------------------------------------------------------------------
-
-    fn make_backlog_dir(dir: &TempDir) -> PathBuf {
-        let backlog = dir.path().join("backlog");
-        fs::create_dir_all(&backlog).unwrap();
-        backlog
-    }
-
-    fn write_backlog(backlog: &Path, content: &str) {
-        fs::write(backlog.join("backlog.md"), content).unwrap();
-    }
-
-    fn read_backlog(backlog: &Path) -> String {
-        fs::read_to_string(backlog.join("backlog.md")).unwrap()
-    }
 
     fn write_item(backlog: &Path, id: &str, body: &str) -> PathBuf {
         let items = backlog.join("items");
@@ -166,8 +154,6 @@ mod tests {
     fn read_used_ids(backlog: &Path) -> String {
         fs::read_to_string(backlog.join(".used-ids")).unwrap()
     }
-
-    const HEADER: &str = "---\nversion: 1\n---\n\n";
 
     // -----------------------------------------------------------------------
     // CMD-DONE-001 — remove the bullet line
