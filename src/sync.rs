@@ -137,12 +137,17 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
     // are fully inert: an ID-shaped token on one does not seed the collision
     // set and does not count for duplicate detection (LLD "Decisions").
     let mut parsed: Vec<Option<Bullet>> = Vec::with_capacity(region.entries.len());
-    for entry in &region.entries {
+    for (i, entry) in region.entries.iter().enumerate() {
         match Bullet::parse(entry.bullet_line) {
             Ok(bullet) => parsed.push(Some(bullet)),
             Err(BulletError::EmptyTitle) => {
+                // Name the bullet by its 1-based position among task bullets
+                // (not a file line number — the parsed region doesn't track
+                // those) so the human fixing it can locate the line, alongside
+                // the debug-escaped content.
                 warnings.push(format!(
-                    "warning: bullet has no title, skipping: {:?}",
+                    "warning: bullet #{} has no title, skipping: {:?}",
+                    i + 1,
                     entry.bullet_line.trim_end()
                 ));
                 parsed.push(None);
@@ -836,7 +841,10 @@ mod tests {
     #[test]
     fn run_warns_and_preserves_marker_only_bullet() {
         let dir = setup();
-        let content = "- [vat-g5y]\n";
+        // A canonical well-formed bullet precedes the malformed one so the
+        // reported bullet number (#2) reflects the actual position, not just
+        // a constant "#1".
+        let content = "- [vat-t1h] First\n- [vat-g5y]\n";
         write_backlog(&dir, content);
         let mut warnings = Vec::new();
         let outcome = super::run_impl(dir.path(), &mut warnings).unwrap();
@@ -844,8 +852,10 @@ mod tests {
         assert_eq!(read_backlog(&dir), content, "line preserved verbatim");
         assert_eq!(warnings.len(), 1, "exactly one warning: {warnings:?}");
         assert!(
-            warnings[0].contains("no title") && warnings[0].contains("[vat-g5y]"),
-            "warning names the problem and the line: {warnings:?}"
+            warnings[0].contains("no title")
+                && warnings[0].contains("[vat-g5y]")
+                && warnings[0].contains("#2"),
+            "warning names the problem, the bullet number, and the line: {warnings:?}"
         );
     }
 
