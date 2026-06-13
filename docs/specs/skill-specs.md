@@ -43,14 +43,12 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 - [ ] **SKILL-TERM-001** — The loop shall evaluate the command's terminal precondition on the refreshed state before mutating; when it is satisfied, the loop shall stop without mutating or pushing.
 - [ ] **SKILL-TERM-002** — When `start <id>` finds the task on refreshed state already claimed by any user, the skill shall report `lost claim: <id> already claimed by <name>` and stop as a user-facing error (consistent with CMD-START-002; the loop never produces a self-claimed refreshed state, because a rejected claim is reset away).
-- [ ] **SKILL-TERM-004** — When `done <id>` finds no task with `<id>` on refreshed state and `<id>` is present in `backlog/.used-ids`, the skill shall stop reporting success (already done); the success guarantees removal only — no retroactive tombstoning or unblocking of out-of-band deletions.
-- [ ] **SKILL-TERM-005** — When `done <id>` finds no task with `<id>` on refreshed state and `<id>` is absent from `backlog/.used-ids`, the skill shall abort with `unknown id: <id>` (per CMD-CC-002).
-- [ ] **SKILL-TERM-006** — When `unblock <id>` finds the task on refreshed state with no `[blocked-by:...]` marker, the skill shall stop reporting success.
-- [ ] **SKILL-TERM-007** — When `block <id> <blocker-id>` finds the task on refreshed state already carrying `[blocked-by:<blocker-id>]` for the same blocker, the skill shall stop reporting success.
-- [ ] **SKILL-TERM-009** — `sync` shall have no terminal precondition; it shall always proceed to mutate on refreshed state.
-- [ ] **SKILL-TERM-010** — Terminal preconditions shall not replace a command's local validation; a validation failure on refreshed state (e.g. `unknown id`, `unknown blocker`) shall abort the command without retrying.
-
-> **Withdrawn ids (intentional gaps).** `SKILL-TERM-003` and `SKILL-TERM-008` are absent by design, not omission. `TERM-003` (`start` on a task already claimed by *me* → success no-op) was **withdrawn**, not deferred: the settled behavior is that *any* existing claim on the refreshed state is a loss (`SKILL-TERM-002`), because the loop never produces a self-claimed refreshed state. `TERM-008` (`config set project.id` already-equal → success) moved to `SKILL-CFG-003` when that command was excluded from the loop. Per the EARS ID-stability rule the numbers are not recycled, so the sequence deliberately skips 003 and 008.
+- [ ] **SKILL-TERM-003** — When `done <id>` finds no task with `<id>` on refreshed state and `<id>` is present in `backlog/.used-ids`, the skill shall stop reporting success (already done); the success guarantees removal only — no retroactive tombstoning or unblocking of out-of-band deletions.
+- [ ] **SKILL-TERM-004** — When `done <id>` finds no task with `<id>` on refreshed state and `<id>` is absent from `backlog/.used-ids`, the skill shall abort with `unknown id: <id>` (per CMD-CC-002).
+- [ ] **SKILL-TERM-005** — When `unblock <id>` finds the task on refreshed state with no `[blocked-by:...]` marker, the skill shall stop reporting success.
+- [ ] **SKILL-TERM-006** — When `block <id> <blocker-id>` finds the task on refreshed state already carrying `[blocked-by:<blocker-id>]` for the same blocker, the skill shall stop reporting success.
+- [ ] **SKILL-TERM-007** — `sync` shall have no terminal precondition; it shall always proceed to mutate on refreshed state.
+- [ ] **SKILL-TERM-008** — Terminal preconditions shall not replace a command's local validation; a validation failure on refreshed state (e.g. `unknown id`, `unknown blocker`) shall abort the command without retrying.
 
 ## `config set project.id` (single push, no claim loop)
 
