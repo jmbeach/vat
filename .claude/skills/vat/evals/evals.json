@@ -1,0 +1,195 @@
+{
+  "skill_name": "vat",
+  "notes": "Tier 1: the skill's local (no-git) behavior — the fidelity contract (SKILL-IMPL-001) and detection-absent path (SKILL-DETECT-002), exercising the SYNC-*/CMD-*/FMT-* specs the skill shares with the binary. Every fixture writes plain files with no backlog/.git, so each run is also a SKILL-DETECT-002 case (the skill must edit in place and run no git). The two start-* evals assume the harness runs with HOME (or XDG_CONFIG_HOME) pointed at the fixture root so .config/vat/config.toml is read as the user config. The claim-loop specs (SKILL-GUARD/LOOP/TERM/CFG) are NOT covered here — they need a real nested-repo + upstream + controlled contention rig and are tracked as a separate backlog item.",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "sync-assigns-ids-and-extracts-notes",
+      "prompt": "/vat sync",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- rewrite the cache layer\n    why: the LRU is thrashing on hot keys\n- add request metrics\n" },
+        { "path": "backlog/.used-ids", "content": "" }
+      ],
+      "assertions": [
+        { "text": "Both bullets in backlog/backlog.md now carry an [id] marker of the form foo-XXX (3 Crockford base32 chars after the foo- prefix)", "spec_ids": ["SYNC-ID-001", "SKILL-IMPL-001"] },
+        { "text": "Each newly assigned id appears on its own line in backlog/.used-ids", "spec_ids": ["SYNC-ID-004"] },
+        { "text": "The note line under the first bullet was moved into backlog/items/<id>.md (a file whose stem matches that bullet's id) and is no longer present in backlog/backlog.md", "spec_ids": ["SYNC-NOTES-001", "SYNC-NOTES-002"] },
+        { "text": "The first bullet's title now ends with the suffix ' (see ./items/<id>.md)' referencing its own id", "spec_ids": ["SYNC-PTR-001"] },
+        { "text": "Markers on each bullet are in canonical order ([id] first) with single-space separators", "spec_ids": ["SYNC-MARK-001", "FMT-MARK-004"] },
+        { "text": "The agent ran no git commands and reported no commit or push (there is no backlog/.git, so it edits files in place)", "spec_ids": ["SKILL-DETECT-002"] }
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "sync-idempotent-noop-skips-write",
+      "prompt": "/vat sync",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] rewrite the cache layer\n- [foo-9hf] add request metrics\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\nfoo-9hf\n" }
+      ],
+      "assertions": [
+        { "text": "backlog/backlog.md is byte-identical to its input (no bullets changed, no markers reordered)", "spec_ids": ["SYNC-WRITE-001", "SYNC-WRITE-002"] },
+        { "text": "No new lines were appended to backlog/.used-ids", "spec_ids": ["SYNC-ID-004"] },
+        { "text": "The agent reports the no-op outcome (e.g. 'unchanged')", "spec_ids": ["SYNC-WRITE-002"] }
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "sync-duplicate-id-aborts-no-writes",
+      "prompt": "/vat sync",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] first task\n- [foo-7k2] second task with same id\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error identifying the duplicated id foo-7k2", "spec_ids": ["SYNC-ID-006"] },
+        { "text": "backlog/backlog.md and backlog/.used-ids are left byte-identical to their inputs (no writes on abort)", "spec_ids": ["SYNC-WRITE-003"] }
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "start-without-username-errors",
+      "prompt": "/vat start foo-7k2",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] do the thing\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error telling the user to set user.name (pointing at 'vat config set user.name <name>')", "spec_ids": ["CMD-START-001"] },
+        { "text": "backlog/backlog.md is unchanged (the foo-7k2 bullet did not gain [in-progress] or [by:...])", "spec_ids": ["CMD-START-001"] }
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "start-claims-unclaimed-task",
+      "prompt": "/vat start foo-7k2",
+      "files": [
+        { "path": ".config/vat/config.toml", "content": "[user]\nname = \"jared\"\n" },
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] do the thing\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The foo-7k2 bullet now carries both [in-progress] and [by:jared] markers", "spec_ids": ["CMD-START-003"] },
+        { "text": "The markers are in canonical order: [foo-7k2] [in-progress] [by:jared] before the title", "spec_ids": ["FMT-MARK-004", "CMD-CC-003"] }
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "start-refuses-already-claimed-task",
+      "prompt": "/vat start foo-7k2",
+      "files": [
+        { "path": ".config/vat/config.toml", "content": "[user]\nname = \"jared\"\n" },
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] [in-progress] [by:alice] do the thing\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error indicating the task is already claimed (by alice)", "spec_ids": ["CMD-START-002"] },
+        { "text": "backlog/backlog.md is unchanged (still claimed by alice, not jared)", "spec_ids": ["CMD-START-002"] }
+      ]
+    },
+    {
+      "id": 6,
+      "eval_name": "block-adds-blocker-marker",
+      "prompt": "/vat block foo-7k2 foo-9hf",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A\n- [foo-9hf] task B\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\nfoo-9hf\n" }
+      ],
+      "assertions": [
+        { "text": "The foo-7k2 bullet now carries a [blocked-by:foo-9hf] marker in canonical position (after [id], before the title)", "spec_ids": ["CMD-BLOCK-005", "FMT-MARK-004"] },
+        { "text": "The foo-9hf bullet is unchanged", "spec_ids": ["CMD-BLOCK-005"] }
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "unblock-removes-marker",
+      "prompt": "/vat unblock foo-7k2",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] [blocked-by:foo-9hf] task A\n- [foo-9hf] task B\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\nfoo-9hf\n" }
+      ],
+      "assertions": [
+        { "text": "The [blocked-by:foo-9hf] marker has been removed from the foo-7k2 bullet, leaving '- [foo-7k2] task A'", "spec_ids": ["CMD-UNBLOCK-002"] }
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "done-removes-tombstones-and-auto-unblocks",
+      "prompt": "/vat done foo-7k2",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A (see ./items/foo-7k2.md)\n- [foo-9hf] [blocked-by:foo-7k2] task B\n" },
+        { "path": "backlog/items/foo-7k2.md", "content": "---\nid: foo-7k2\n---\n\nsome notes for task A\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\nfoo-9hf\n" }
+      ],
+      "assertions": [
+        { "text": "The foo-7k2 bullet line has been removed entirely from backlog/backlog.md", "spec_ids": ["CMD-DONE-001"] },
+        { "text": "The file backlog/items/foo-7k2.md has been deleted", "spec_ids": ["CMD-DONE-002"] },
+        { "text": "foo-7k2 is present in backlog/.used-ids (it was already there; not duplicated)", "spec_ids": ["CMD-DONE-003"] },
+        { "text": "The [blocked-by:foo-7k2] marker has been stripped from the foo-9hf bullet (auto-unblock)", "spec_ids": ["CMD-DONE-004"] }
+      ]
+    },
+    {
+      "id": 9,
+      "eval_name": "config-set-projectid-refuses-mixed-prefix",
+      "prompt": "/vat config set project.id bar",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error because existing ids still use the old 'foo' prefix", "spec_ids": ["CMD-CFG-005"] },
+        { "text": "backlog/vat.toml still contains id = \"foo\" (unchanged)", "spec_ids": ["CMD-CFG-005"] }
+      ]
+    },
+    {
+      "id": 10,
+      "eval_name": "config-set-projectid-rejects-bad-format",
+      "prompt": "/vat config set project.id toolong",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with a validation error because 'toolong' is not exactly 3 Crockford base32 characters", "spec_ids": ["CMD-CFG-004"] },
+        { "text": "backlog/vat.toml is unchanged (still id = \"foo\")", "spec_ids": ["CMD-CFG-004"] }
+      ]
+    },
+    {
+      "id": 11,
+      "eval_name": "init-creates-backlog-structure",
+      "prompt": "/vat init zap",
+      "files": [
+        { "path": "README.md", "content": "# A project with no backlog yet\n" }
+      ],
+      "assertions": [
+        { "text": "backlog/vat.toml was created containing [project] id = \"zap\"", "spec_ids": ["CMD-INIT-002", "CMD-INIT-005"] },
+        { "text": "backlog/backlog.md was created containing only a version: 1 frontmatter block", "spec_ids": ["CMD-INIT-005"] },
+        { "text": "backlog/.used-ids was created and is empty", "spec_ids": ["CMD-INIT-005"] },
+        { "text": "backlog/README.md was created describing what VAT is and the basic workflow", "spec_ids": ["CMD-INIT-006"] }
+      ]
+    },
+    {
+      "id": 12,
+      "eval_name": "init-rejects-bad-prefix",
+      "prompt": "/vat init toolong",
+      "files": [
+        { "path": "README.md", "content": "# A project with no backlog yet\n" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error because 'toolong' is not exactly 3 Crockford base32 characters", "spec_ids": ["CMD-INIT-004"] },
+        { "text": "No backlog/ directory was created", "spec_ids": ["CMD-INIT-004"] }
+      ]
+    }
+  ]
+}

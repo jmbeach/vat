@@ -60,7 +60,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## Exit codes
 
 - [ ] **CMD-EXIT-001** — On success, every command shall exit with code 0.
-- [ ] **CMD-EXIT-002** — On user-facing errors (unknown ID, missing config, validation failure, version mismatch), every command shall exit with code 1.
+- [ ] **CMD-EXIT-002** — On user-facing errors (unknown ID, missing config, validation failure, version mismatch, unreachable git remote), every command shall exit with code 1.
 - [ ] **CMD-EXIT-003** — On internal errors (file IO failure, unexpected parse failure), every command shall exit with code 2.
 
 ## Out of scope for v1
