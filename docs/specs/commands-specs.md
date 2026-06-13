@@ -30,12 +30,12 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat block <id> <blocker-id>`
 
-- [ ] **CMD-BLOCK-001** — When `<id>` equals `<blocker-id>`, `vat block` shall abort with an error.
-- [ ] **CMD-BLOCK-002** — When no bullet matches `<blocker-id>`, `vat block` shall abort with an error.
-- [ ] **CMD-BLOCK-003** — When the target bullet already has `[blocked-by:<blocker-id>]` matching the supplied blocker, `vat block` shall succeed without modifying any file.
-- [ ] **CMD-BLOCK-004** — When the target bullet has `[blocked-by:<other>]` for a different blocker, `vat block` shall replace it with `[blocked-by:<blocker-id>]`.
-- [ ] **CMD-BLOCK-005** — When the target bullet has no `[blocked-by:...]` marker, `vat block` shall add `[blocked-by:<blocker-id>]` in canonical position.
-- [ ] **CMD-BLOCK-006** — `vat block` in v1 shall not detect blocker cycles.
+- [x] **CMD-BLOCK-001** — When `<id>` equals `<blocker-id>`, `vat block` shall abort with an error.
+- [x] **CMD-BLOCK-002** — When no bullet matches `<blocker-id>`, `vat block` shall abort with an error.
+- [x] **CMD-BLOCK-003** — When the target bullet already has `[blocked-by:<blocker-id>]` matching the supplied blocker, `vat block` shall succeed without modifying any file.
+- [x] **CMD-BLOCK-004** — When the target bullet has `[blocked-by:<other>]` for a different blocker, `vat block` shall replace it with `[blocked-by:<blocker-id>]`.
+- [x] **CMD-BLOCK-005** — When the target bullet has no `[blocked-by:...]` marker, `vat block` shall add `[blocked-by:<blocker-id>]` in canonical position.
+- [x] **CMD-BLOCK-006** — `vat block` in v1 shall not detect blocker cycles.
 
 ## `vat unblock <id>`
 

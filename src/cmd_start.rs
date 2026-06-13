@@ -148,7 +148,11 @@ fn no_user_name_error() -> anyhow::Error {
 
 /// Serialize `region` with entry `entry_idx`'s bullet line replaced by `new_bullet_line`.
 /// Notes for every entry are preserved verbatim; the preamble is preserved verbatim.
-fn serialize_region_with_replaced_bullet(
+///
+/// Shared by every single-bullet-mutating command (`start`, `block`, ...). vat-m2k
+/// will consolidate this single-bullet-replace helper into a common home; until then
+/// it lives here and is reused across commands rather than duplicated.
+pub(crate) fn serialize_region_with_replaced_bullet(
     region: &ParsedRegion<'_>,
     entry_idx: usize,
     new_bullet_line: &str,
