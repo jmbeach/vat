@@ -30,9 +30,9 @@ Every tagged release also carries prebuilt binaries, attached as `.tar.gz` asset
 
 - `aarch64-apple-darwin` — Apple Silicon macOS
 - `x86_64-apple-darwin` — Intel macOS
-- `x86_64-unknown-linux-gnu` — x86-64 Linux
+- `x86_64-unknown-linux-musl` — x86-64 Linux (statically linked)
 
-The Linux binary links glibc dynamically and needs a reasonably recent glibc. On a musl-based distro (e.g. Alpine) or a very old glibc, build from source with `cargo install --git` instead.
+The Linux binary is built against musl and statically linked, so it runs on any x86-64 Linux — including musl-based distros (e.g. Alpine) and older glibc systems — with no runtime libc dependency.
 
 Download the archive for your platform, extract the `vat` binary, and put it somewhere on your `PATH`:
 

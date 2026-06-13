@@ -1,14 +1,16 @@
 name: Release
 
 # Cut a release by pushing a version tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
-# A single `create-release` job creates the GitHub Release once, then a per-target
-# matrix builds the binaries and uploads a `.tar.gz` asset each.
+# The `build` matrix compiles a binary per target with NO write access and uploads
+# each as a workflow artifact; a single `release` job then publishes them. Splitting
+# it this way keeps the compile jobs least-privilege and creates the GitHub Release
+# exactly once (no concurrent jobs racing to create it).
 on:
   push:
     tags:
       - 'v*'
 
-# Read-only by default; only the jobs that touch the release opt into write.
+# Read-only by default; only the `release` job opts into write.
 permissions:
   contents: read
 
@@ -18,33 +20,15 @@ env:
   # same bar as CI.
   RUSTFLAGS: -D warnings
 
+# Every action is pinned to a commit SHA (human-readable tag in the comment) so a
+# force-pushed tag can't swap an action — including the one that installs the
+# compiler — out from under the release.
 jobs:
-  # Create the release exactly once, up front, so the matrix build jobs never race
-  # to create it concurrently (they only upload assets to an existing release).
-  create-release:
-    name: Create release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Create the release if it does not exist
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          # Passed via env (never interpolated into the script) so a crafted tag
-          # name cannot inject shell.
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes --verify-tag
-          fi
-
   build:
     name: ${{ matrix.target }}
-    needs: create-release
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
+    # Compile jobs need no special permissions: they only read the repo and upload
+    # a workflow artifact. They never touch the release.
     strategy:
       # Build every target even if one fails, so a single broken target doesn't
       # block publishing the others.
@@ -55,16 +39,17 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-latest
-          # Dynamically links the runner's glibc, so it needs a reasonably recent
-          # glibc at runtime. On musl distros (Alpine) or very old glibc, install
-          # from source instead: `cargo install --git https://github.com/jmbeach/vat`.
-          - target: x86_64-unknown-linux-gnu
+          # musl, not gnu: produces a statically linked binary that runs on any
+          # x86-64 Linux (Alpine/musl and old-glibc distros included), so the
+          # distributable artifact has no runtime glibc-version dependency.
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
     steps:
-      # Third-party actions pinned to a commit SHA (human-readable tag in the
-      # comment) per supply-chain discipline: a force-pushed tag can't swap the
-      # action — including the one that installs the compiler — out from under us.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install musl build tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
@@ -82,15 +67,49 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: cargo build --release --locked --target "$TARGET"
 
-      - name: Package and upload binary
+      - name: Package binary
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          # Both passed via env and referenced quoted, never interpolated into the
+          # Passed via env and referenced quoted, never interpolated into the
           # script body, so a crafted tag/target can't inject shell.
           TAG_NAME: ${{ github.ref_name }}
           TARGET: ${{ matrix.target }}
         run: |
           asset="vat-${TAG_NAME}-${TARGET}.tar.gz"
           tar -czf "$asset" -C "target/${TARGET}/release" vat
-          gh release upload "$TAG_NAME" "$asset" --clobber
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # matrix.target is a controlled value, safe to interpolate into the name.
+          name: vat-${{ matrix.target }}
+          path: vat-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    # The ONLY job with write access — it creates the release and uploads assets.
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish binaries to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Passed via env (never interpolated into the script) so a crafted tag
+          # name cannot inject shell.
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          # Create the release once if it doesn't exist, then attach every target's
+          # archive. `--clobber` makes re-runs idempotent.
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes --verify-tag
+          fi
+          gh release upload "$TAG_NAME" dist/*.tar.gz --clobber
