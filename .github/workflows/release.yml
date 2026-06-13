@@ -1,24 +1,50 @@
 name: Release
 
 # Cut a release by pushing a version tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
-# This builds release binaries for the three supported targets and attaches a
-# `.tar.gz` per target to the GitHub Release for that tag.
+# A single `create-release` job creates the GitHub Release once, then a per-target
+# matrix builds the binaries and uploads a `.tar.gz` asset each.
 on:
   push:
     tags:
       - 'v*'
 
-# The release job needs to create the Release and upload assets.
+# Read-only by default; only the jobs that touch the release opt into write.
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  # Match ci.yml: a warning fails the build, so the published artifact clears the
+  # same bar as CI.
+  RUSTFLAGS: -D warnings
 
 jobs:
-  release:
+  # Create the release exactly once, up front, so the matrix build jobs never race
+  # to create it concurrently (they only upload assets to an existing release).
+  create-release:
+    name: Create release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Passed via env (never interpolated into the script) so a crafted tag
+          # name cannot inject shell.
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --title "$TAG_NAME" --generate-notes --verify-tag
+          fi
+
+  build:
     name: ${{ matrix.target }}
+    needs: create-release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       # Build every target even if one fails, so a single broken target doesn't
       # block publishing the others.
@@ -29,36 +55,42 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-latest
+          # Dynamically links the runner's glibc, so it needs a reasonably recent
+          # glibc at runtime. On musl distros (Alpine) or very old glibc, install
+          # from source instead: `cargo install --git https://github.com/jmbeach/vat`.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions pinned to a commit SHA (human-readable tag in the
+      # comment) per supply-chain discipline: a force-pushed tag can't swap the
+      # action — including the one that installs the compiler — out from under us.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
         with:
+          # Required when the action is pinned by SHA: it can't infer the channel
+          # from the ref name, so name it explicitly.
+          toolchain: stable
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
+      # No build cache here on purpose: a cache shared across branches could be
+      # poisoned by a malicious PR, and the release is the artifact users download,
+      # so it is built clean every time.
       - name: Build release binary
-        run: cargo build --release --locked --target ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --locked --target "$TARGET"
 
-      - name: Package binary
-        shell: bash
+      - name: Package and upload binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Both passed via env and referenced quoted, never interpolated into the
+          # script body, so a crafted tag/target can't inject shell.
+          TAG_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
         run: |
-          asset="vat-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
-          tar -czf "$asset" -C "target/${{ matrix.target }}/release" vat
-          echo "ASSET=$asset" >> "$GITHUB_ENV"
-
-      - name: Attach binary to the release
-        # Third-party action pinned to a release commit SHA per the supply-chain
-        # discipline applied to the CI workflow. Each matrix job uploads its own
-        # asset to the same tag's release (the action creates the release on the
-        # first upload and appends on the rest).
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        with:
-          files: ${{ env.ASSET }}
-          fail_on_unmatched_files: true
+          asset="vat-${TAG_NAME}-${TARGET}.tar.gz"
+          tar -czf "$asset" -C "target/${TARGET}/release" vat
+          gh release upload "$TAG_NAME" "$asset" --clobber
