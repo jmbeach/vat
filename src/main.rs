@@ -1,6 +1,7 @@
 mod backlog_file;
 mod base32;
 mod bullet;
+mod cmd_block;
 mod cmd_completions;
 mod cmd_config;
 mod cmd_done;
@@ -100,7 +101,7 @@ fn main() {
         Commands::Init { prefix } => cmd_init(prefix),
         Commands::Sync => cmd_sync(),
         Commands::Start { id } => cmd_start(&id),
-        Commands::Block { id, blocker_id } => cmd_block(id, blocker_id),
+        Commands::Block { id, blocker_id } => cmd_block(&id, &blocker_id),
         Commands::Unblock { id } => cmd_unblock(&id),
         Commands::Done { id } => cmd_done(&id),
         Commands::Config { action } => match action {
@@ -174,9 +175,16 @@ fn cmd_start(id: &str) {
     }
 }
 
-fn cmd_block(_id: String, _blocker_id: String) {
-    eprintln!("vat block: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006
+fn cmd_block(id: &str, blocker_id: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    match cmd_block::run(id, blocker_id, backlog_dir) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(classify_exit_code(&e));
+        }
+    }
 }
 
 // @spec CMD-UNBLOCK-001, CMD-UNBLOCK-002
