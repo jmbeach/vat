@@ -45,11 +45,11 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat done <id>`
 
-- [ ] **CMD-DONE-001** — `vat done` shall remove the entire bullet line for `<id>` from `backlog.md`.
-- [ ] **CMD-DONE-002** — When `backlog/items/<id>.md` exists, `vat done` shall delete it.
-- [ ] **CMD-DONE-003** — `vat done` shall append `<id>` to `backlog/.used-ids` if it is not already present.
-- [ ] **CMD-DONE-004** — `vat done` shall remove every `[blocked-by:<id>]` marker from any other bullet in the parsed region.
-- [ ] **CMD-DONE-005** — `vat done` shall succeed even when the target bullet has its own `[blocked-by:...]` marker.
+- [x] **CMD-DONE-001** — `vat done` shall remove the entire bullet line for `<id>` from `backlog.md`.
+- [x] **CMD-DONE-002** — When `backlog/items/<id>.md` exists, `vat done` shall delete it.
+- [x] **CMD-DONE-003** — `vat done` shall append `<id>` to `backlog/.used-ids` if it is not already present.
+- [x] **CMD-DONE-004** — `vat done` shall remove every `[blocked-by:<id>]` marker from any other bullet in the parsed region.
+- [x] **CMD-DONE-005** — `vat done` shall succeed even when the target bullet has its own `[blocked-by:...]` marker.
 
 ## `vat config`
 
