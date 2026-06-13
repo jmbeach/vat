@@ -67,13 +67,13 @@ After mutation, the helper serializes the parsed region back through the same em
 ## `vat done <id>`
 
 1. `find_entry(id)`.
-2. Remove the entire bullet line (and any blank line immediately following, if it would leave a double blank).
+2. Drop the matching **task entry in full** — its bullet line *and* the note lines that follow it (which is where the parsed-region grammar parks the blank line immediately following a bullet). Because the blank that separated neighbours lives in the *preceding* entry's notes, removing the whole entry leaves neighbours separated by a single blank and never produces a double blank at the seam. (The earlier "remove the bullet line and any following blank" phrasing describes the same observable result; removing the entry is how it is achieved.) `done` on a blocked task is allowed, so the entry's own `[blocked-by:...]` is irrelevant — the entry is gone regardless.
 3. If `backlog/items/<id>.md` exists, delete it.
-4. Append `<id>` to `.used-ids` if not already present.
-5. Walk the remaining parsed region; for every other entry, if it has `[blocked-by:<id>]`, strip that marker. (Auto-unblock per HLD §5.)
-6. Write `backlog.md`.
+4. Append `<id>` to `.used-ids` if not already present (read the tombstone set first; skip the append when already recorded).
+5. Walk the remaining parsed region; for every other **well-formed** bullet, if its `[blocked-by:...]` targets `<id>`, clear that marker and re-emit the bullet via `Bullet::serialize` (canonical order, FMT-MARK-004). Every other bullet — well-formed-but-unblocked or malformed (FMT-PARSE-006 inert) — passes through verbatim, so `done` touches only what it must. (Auto-unblock per HLD §5.)
+6. Write `backlog.md` **last**, after the item-file delete and tombstone append. If a bookkeeping step fails the bullet is still present, so a re-run finds it and completes idempotently (item delete is a no-op once gone; the tombstone append is skipped once recorded).
 
-The auto-unblock pass is the one place a `done` mutates more than the matching bullet line, but the mutation is bounded (only `[blocked-by:<id>]` markers, only on other entries) and falls naturally out of the same parse-mutate-emit machinery.
+Reuses the shared parse-mutate-emit machinery wired into `sync` by vat-v3k — `Bullet::parse`/`Bullet::serialize` plus the `ParsedRegion` view — rather than hand-rolling a serializer. The auto-unblock pass is the one place a `done` mutates more than the matching bullet line, but the mutation is bounded (only `[blocked-by:<id>]` markers, only on other entries) and falls naturally out of that machinery.
 
 ## `vat config get <key>`
 
