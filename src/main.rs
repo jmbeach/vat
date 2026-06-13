@@ -226,6 +226,7 @@ fn classify_exit_code(e: &anyhow::Error) -> i32 {
     use backlog_file::UnsupportedVersion;
     use errors::UserError;
     use project_config::ConfigError;
+    use tombstone::TombstoneError;
     use user_config::UserConfigError;
 
     for cause in e.chain() {
@@ -251,6 +252,17 @@ fn classify_exit_code(e: &anyhow::Error) -> i32 {
                 | UserConfigError::NoHome => 1,
             };
         }
+        if let Some(te) = cause.downcast_ref::<TombstoneError>() {
+            return match te {
+                // A genuine OS error is internal; the structural variants are all
+                // user-addressable (corrupt tombstone line, or backlog/ missing or
+                // shadowed by a regular file — "run `vat init`").
+                TombstoneError::Io(_) => 2,
+                TombstoneError::MalformedLine { .. }
+                | TombstoneError::NoBacklogDir { .. }
+                | TombstoneError::BacklogNotDirectory { .. } => 1,
+            };
+        }
         if cause.downcast_ref::<UnsupportedVersion>().is_some() {
             return 1;
         }
@@ -271,6 +283,7 @@ mod tests {
     use crate::base32::Base32Error;
     use crate::errors::UserError;
     use crate::project_config::ConfigError;
+    use crate::tombstone::TombstoneError;
     use crate::user_config::UserConfigError;
 
     fn anyhow(e: impl std::error::Error + Send + Sync + 'static) -> anyhow::Error {
@@ -405,6 +418,41 @@ mod tests {
     fn context_wrapped_user_error_is_user() {
         let e = anyhow::Error::from(UserError("cannot change project.id".to_owned()))
             .context("validating");
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn tombstone_io_error_is_internal() {
+        let e = anyhow(TombstoneError::Io(io_err()));
+        assert_eq!(classify_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn tombstone_malformed_line_is_user() {
+        let e = anyhow(TombstoneError::MalformedLine {
+            line_no: 3,
+            content: "not-an-id".to_owned(),
+        });
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn tombstone_no_backlog_dir_is_user() {
+        let e = anyhow(TombstoneError::NoBacklogDir {
+            path: PathBuf::from("backlog"),
+        });
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn tombstone_backlog_not_directory_is_user() {
+        let e = anyhow(TombstoneError::BacklogNotDirectory {
+            path: PathBuf::from("backlog"),
+        });
         assert_eq!(classify_exit_code(&e), 1);
     }
 }

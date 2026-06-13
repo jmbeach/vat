@@ -47,9 +47,10 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     let new_parsed = serialize_completing(&region, target_idx, &id_lower);
     let output = bf.serialize(&new_parsed);
 
-    // CMD-DONE-002: delete the item file if present. `exists()` plus a NotFound
-    // tolerance keeps the "if exists" contract while staying robust to a file
-    // that vanishes between the check and the remove.
+    // CMD-DONE-002: delete the item file if present. We call `remove_file`
+    // directly and treat NotFound as success rather than guarding with
+    // `exists()` first — `done` doesn't require an item file to exist, and the
+    // single syscall has no TOCTOU window between a check and the removal.
     let item_path = backlog_dir.join("items").join(format!("{id_lower}.md"));
     match std::fs::remove_file(&item_path) {
         Ok(()) => {}
@@ -88,7 +89,16 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
 /// the seam (CMD-DONE-001).
 // @spec CMD-DONE-001, CMD-DONE-004, CMD-CC-003
 fn serialize_completing(region: &ParsedRegion<'_>, target_idx: usize, done_id: &str) -> String {
-    let mut out = String::with_capacity(region.preamble.len());
+    // Seed capacity from the whole parsed region (preamble + every entry's
+    // bullet and notes). The output is that minus one dropped entry, so this is
+    // a safe upper bound that avoids reallocation as the string grows.
+    let estimated = region.preamble.len()
+        + region
+            .entries
+            .iter()
+            .map(|e| e.bullet_line.len() + e.notes.len())
+            .sum::<usize>();
+    let mut out = String::with_capacity(estimated);
     out.push_str(region.preamble);
     for (i, entry) in region.entries.iter().enumerate() {
         if i == target_idx {
@@ -361,7 +371,10 @@ mod tests {
         let item = write_item(&backlog, "vat-x9z", "notes\n");
         write_used_ids(&backlog, "");
 
-        let _ = run("vat-x9z", &backlog);
+        // Tie the no-write assertions to the error path they guard: an unknown id
+        // must abort, not silently succeed having done nothing.
+        let err = run("vat-x9z", &backlog).unwrap_err();
+        assert!(err.to_string().contains("unknown id"), "{err}");
 
         assert_eq!(read_backlog(&backlog), original);
         assert!(item.exists(), "unknown-id abort must not delete item files");
