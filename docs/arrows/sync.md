@@ -15,10 +15,10 @@
 - docs/llds/sync.md
 
 ### EARS
-- docs/specs/sync-specs.md (23 active specs: 20 implemented, 3 gaps; 1 deferred)
+- docs/specs/sync-specs.md (24 active specs: 21 implemented, 3 gaps; 1 deferred)
 
 ### Tests
-- src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/003/004, SYNC-MARK-001/002/003, SYNC-ID-001/002/004/005/006, FMT-PARSE-006)
+- src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/003/004, SYNC-MARK-001/002/003/004, SYNC-ID-001/002/004/005/006, FMT-PARSE-006)
 - src/id_assignment.rs (inline `#[cfg(test)]` — unit tests covering SYNC-ID-001/002/003/005/006)
 - src/item_file.rs (inline `#[cfg(test)]` — SYNC-NOTES-004 indentation stripping)
 
@@ -50,14 +50,14 @@
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
 | ID assignment | SYNC-ID-001 to 006 | 6 | 0 | 0 |
-| Marker normalization | SYNC-MARK-001 to 003 | 3 | 0 | 0 |
+| Marker normalization | SYNC-MARK-001 to 004 | 4 | 0 | 0 |
 | Notes extraction | SYNC-NOTES-001 to 005 | 5 | 0 | 0 |
 | Item-file pointer suffix | SYNC-PTR-001 to 003 | 0 | 0 | 3 |
 | Idempotence / writes | SYNC-WRITE-001 to 004 | 4 | 0 | 0 |
 | Preconditions | SYNC-PRE-001 to 002 | 2 | 0 | 0 |
 | Deferred | SYNC-GC-001 | 0 | 1 | 0 |
 
-**Summary:** 20 of 23 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
+**Summary:** 21 of 24 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
 
 ## Key Findings
 
@@ -65,7 +65,7 @@
 
 2. **ID assignment implemented** — SYNC-ID-001 to 006 (vat-s9g, PR #20): `src/id_assignment.rs` holds the generation/validation core; `sync::run` seeds the collision set from `.used-ids` plus existing region IDs, splices new `[id]` markers in at the front of unid'd bullets, and appends new IDs to `.used-ids` only after a successful `backlog.md` write (SYNC-ID-004).
 
-3. **Marker normalization implemented** — SYNC-MARK-001 to 003 and full idempotence (SYNC-WRITE-001) plus all-or-nothing writes (SYNC-WRITE-003) landed via vat-v3k: `sync::run` parses every bullet with `Bullet::parse` and re-emits it via `Bullet::serialize`. Bullet identity now follows the front-loaded parser — an ID-shaped token behind an unknown bracketed token is title text, not the bullet's ID (the interim anywhere-scan `extract_id` was deleted; see the LLD's Decisions section).
+3. **Marker normalization implemented** — SYNC-MARK-001 to 004 and full idempotence (SYNC-WRITE-001) plus all-or-nothing writes (SYNC-WRITE-003) landed via vat-v3k: `sync::run` parses every bullet with `Bullet::parse` and re-emits it via `Bullet::serialize`. Bullet identity now follows the front-loaded parser — an ID-shaped token behind an unknown bracketed token is title text, not the bullet's ID (the interim anywhere-scan `extract_id` was deleted; see the LLD's Decisions section). SYNC-MARK-004: when re-serialization would drop a second `[blocked-by:...]` (FMT-MARK-007), sync warns per dropped target ID via `Bullet::parse_reporting_dropped`, so multi-blocker lines aren't silently truncated on first sync.
 
 4. **FMT-PARSE-006 wired** — Title-less bullets warn and pass through verbatim (line and note lines preserved), skipped for ID assignment and notes extraction. Malformed bullets are fully inert: their ID-shaped tokens do not seed collision avoidance or duplicate detection.
 

@@ -18,6 +18,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **SYNC-MARK-001** — When `vat sync` writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
 - [x] **SYNC-MARK-002** — `vat sync` shall not modify the value of `[in-progress]`, `[by:...]`, or `[blocked-by:...]` markers; it only reorders and respaces them. Lowercasing of ID values in `[id]` and `[blocked-by:...]` markers (FMT-MARK-001, FMT-MARK-003 — everything VAT writes is lowercase) is canonicalization, not a value modification.
 - [x] **SYNC-MARK-003** — `vat sync` shall not strip dangling `[blocked-by:<id>]` markers whose target ID is not present in the parsed region.
+- [x] **SYNC-MARK-004** — When `vat sync` re-serializes a bullet carrying more than one `[blocked-by:...]` marker (only the first is kept, per FMT-MARK-007), the system shall print a warning naming each dropped target ID, so the loss is not silent.
 
 ## Notes extraction
 

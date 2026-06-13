@@ -50,7 +50,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [x] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
 - [x] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
 - [x] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
-- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
+- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet, and shall make the discarded target IDs available to the caller (so a re-serializing caller such as `vat sync` can warn rather than dropping them silently — see SYNC-MARK-004).
 
 ## Empty and malformed bullets
 

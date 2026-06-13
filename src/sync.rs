@@ -2,7 +2,7 @@
 // @spec SYNC-PRE-001, SYNC-PRE-002
 // @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
-// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003
+// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003, SYNC-MARK-004
 // @spec FMT-PARSE-006
 
 use std::io;
@@ -65,7 +65,10 @@ struct PendingWrite {
 /// markers in canonical order with single-space separators (SYNC-MARK-001),
 /// reorders/respaces without changing marker values — ID lowercasing is
 /// canonicalization (SYNC-MARK-002) — and preserves dangling
-/// `[blocked-by:...]` markers (SYNC-MARK-003). A title-less bullet is
+/// `[blocked-by:...]` markers (SYNC-MARK-003). When a bullet carries more than
+/// one `[blocked-by:...]`, only the first survives re-serialization
+/// (FMT-MARK-007); sync prints a warning naming each dropped target ID so the
+/// loss is not silent (SYNC-MARK-004). A title-less bullet is
 /// malformed: a warning is printed and the line plus its note lines pass
 /// through verbatim, skipped for ID assignment and notes extraction
 /// (FMT-PARSE-006).
@@ -96,7 +99,7 @@ struct PendingWrite {
 // @spec SYNC-PRE-001, SYNC-PRE-002
 // @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
-// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003
+// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003, SYNC-MARK-004
 // @spec FMT-PARSE-006
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let mut warnings = Vec::new();
@@ -138,8 +141,21 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
     // set and does not count for duplicate detection (LLD "Decisions").
     let mut parsed: Vec<Option<Bullet>> = Vec::with_capacity(region.entries.len());
     for (i, entry) in region.entries.iter().enumerate() {
-        match Bullet::parse(entry.bullet_line) {
-            Ok(bullet) => parsed.push(Some(bullet)),
+        match Bullet::parse_reporting_dropped(entry.bullet_line) {
+            Ok((bullet, dropped_blocked_by)) => {
+                // SYNC-MARK-004 / FMT-MARK-007: re-serialization keeps only the
+                // first [blocked-by:]. Warn (naming each dropped target ID and
+                // the bullet's position) so a user who listed several blockers
+                // isn't silently robbed of them on their first sync.
+                for dropped in &dropped_blocked_by {
+                    warnings.push(format!(
+                        "warning: bullet #{n} drops extra [blocked-by:{dropped}] (only the first [blocked-by:] is kept): {line:?}",
+                        n = i + 1,
+                        line = entry.bullet_line.trim_end()
+                    ));
+                }
+                parsed.push(Some(bullet));
+            }
             Err(BulletError::EmptyTitle) => {
                 // Name the bullet by its 1-based position among task bullets
                 // (not a file line number — the parsed region doesn't track
@@ -155,18 +171,17 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
         }
     }
 
-    // One ID slot per well-formed bullet. `Bullet::parse` already lowercases
-    // IDs (FMT-MARK-001): tombstones are lowercase-normalized on read, and the
-    // prefix comparison in `assign_ids` (SYNC-ID-005) is against the lowercase
-    // `project.id`.
-    let mut slots: Vec<Option<String>> = Vec::new();
-    let mut slot_entry: Vec<usize> = Vec::new();
-    for (i, bullet) in parsed.iter().enumerate() {
-        if let Some(bullet) = bullet {
-            slots.push(bullet.id.clone());
-            slot_entry.push(i);
-        }
-    }
+    // One ID slot per well-formed bullet, in `parsed` order. `Bullet::parse`
+    // already lowercases IDs (FMT-MARK-001): tombstones are lowercase-normalized
+    // on read, and the prefix comparison in `assign_ids` (SYNC-ID-005) is
+    // against the lowercase `project.id`.
+    //
+    // `slots` is positionally aligned with `parsed.iter().flatten()` (the
+    // well-formed bullets, in order). Both the seed below and the copy-back
+    // re-derive that correspondence from the same `flatten()` iterator, so
+    // there is no separate index vector that could drift out of lockstep with
+    // `slots` if a future change adds another reason to skip an entry.
+    let mut slots: Vec<Option<String>> = parsed.iter().flatten().map(|b| b.id.clone()).collect();
 
     // SYNC-ID-002: collision avoidance against tombstones ∪ IDs already
     // present in the parsed region.
@@ -185,11 +200,11 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
 
     // `assign_ids` filled every `None` slot; copy the slots back so each
     // well-formed bullet now carries its ID (SYNC-ID-001: serialize emits the
-    // `[id]` marker first, before any other markers).
-    for (slot, &entry_idx) in slots.iter().zip(&slot_entry) {
-        if let Some(bullet) = &mut parsed[entry_idx] {
-            bullet.id.clone_from(slot);
-        }
+    // `[id]` marker first, before any other markers). `parsed.iter_mut()
+    // .flatten()` yields exactly the same well-formed bullets, in the same
+    // order, that built `slots`, so the zip pairs each ID with its own bullet.
+    for (bullet, slot) in parsed.iter_mut().flatten().zip(slots.iter()) {
+        bullet.id.clone_from(slot);
     }
 
     // Collect all item-file writes before touching any file.  A scan-phase
@@ -813,6 +828,58 @@ mod tests {
         assert_eq!(read_backlog(&dir), content);
     }
 
+    // @spec SYNC-MARK-004
+    #[test]
+    fn run_warns_when_a_second_blocked_by_is_dropped() {
+        let dir = setup();
+        // Two blockers on one bullet. FMT-MARK-007 keeps only the first, so
+        // re-serialization drops vat-h8x — but the user must be told, not
+        // silently robbed of a blocker on their first sync.
+        write_backlog(
+            &dir,
+            "- [vat-t1h] [blocked-by:vat-f1w] [blocked-by:vat-h8x] Finish auth\n",
+        );
+        let mut warnings = Vec::new();
+        let outcome = super::run_impl(dir.path(), &mut warnings).unwrap();
+        assert_eq!(outcome, SyncOutcome::Wrote);
+        // The first blocker survives; the second is gone from the line.
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] [blocked-by:vat-f1w] Finish auth\n"
+        );
+        // ...and the warning names the dropped target ID, the bullet number,
+        // and the original line. Exact match so a reword fails loudly.
+        assert_eq!(warnings.len(), 1, "exactly one warning: {warnings:?}");
+        assert_eq!(
+            warnings[0],
+            r#"warning: bullet #1 drops extra [blocked-by:vat-h8x] (only the first [blocked-by:] is kept): "- [vat-t1h] [blocked-by:vat-f1w] [blocked-by:vat-h8x] Finish auth""#
+        );
+    }
+
+    // @spec SYNC-MARK-004
+    #[test]
+    fn run_warns_once_per_dropped_blocker() {
+        let dir = setup();
+        // Three blockers: two are dropped, each warned about by target ID.
+        write_backlog(
+            &dir,
+            "- [vat-t1h] [blocked-by:vat-f1w] [blocked-by:vat-h8x] [blocked-by:vat-k2m] Title\n",
+        );
+        let mut warnings = Vec::new();
+        super::run_impl(dir.path(), &mut warnings).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] [blocked-by:vat-f1w] Title\n"
+        );
+        assert_eq!(
+            warnings.len(),
+            2,
+            "one warning per dropped blocker: {warnings:?}"
+        );
+        assert!(warnings[0].contains("[blocked-by:vat-h8x]"));
+        assert!(warnings[1].contains("[blocked-by:vat-k2m]"));
+    }
+
     // ── Bullet identity follows the front-loaded parser (FMT-MARK-006) ────────
 
     // @spec SYNC-ID-001
@@ -851,11 +918,12 @@ mod tests {
         assert_eq!(outcome, SyncOutcome::Skipped, "nothing else to change");
         assert_eq!(read_backlog(&dir), content, "line preserved verbatim");
         assert_eq!(warnings.len(), 1, "exactly one warning: {warnings:?}");
-        assert!(
-            warnings[0].contains("no title")
-                && warnings[0].contains("[vat-g5y]")
-                && warnings[0].contains("#2"),
-            "warning names the problem, the bullet number, and the line: {warnings:?}"
+        // Exact match (not a substring check): a silent reword of the message
+        // — or a drift in the reported bullet number / quoted line — fails the
+        // test loudly instead of slipping through a `contains`.
+        assert_eq!(
+            warnings[0],
+            r#"warning: bullet #2 has no title, skipping: "- [vat-g5y]""#
         );
     }
 
