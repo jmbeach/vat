@@ -4,6 +4,7 @@ mod bullet;
 mod cmd_completions;
 mod cmd_config;
 mod cmd_init;
+mod cmd_start;
 mod errors;
 mod file_io;
 mod id_assignment;
@@ -96,7 +97,7 @@ fn main() {
     match cli.command {
         Commands::Init { prefix } => cmd_init(prefix),
         Commands::Sync => cmd_sync(),
-        Commands::Start { id } => cmd_start(id),
+        Commands::Start { id } => cmd_start(&id),
         Commands::Block { id, blocker_id } => cmd_block(id, blocker_id),
         Commands::Unblock { id } => cmd_unblock(id),
         Commands::Done { id } => cmd_done(id),
@@ -159,9 +160,16 @@ fn cmd_sync() {
     }
 }
 
-fn cmd_start(_id: String) {
-    eprintln!("vat start: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-START-001, CMD-START-002, CMD-START-003
+fn cmd_start(id: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    match cmd_start::run(id, backlog_dir) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(classify_exit_code(&e));
+        }
+    }
 }
 
 fn cmd_block(_id: String, _blocker_id: String) {
