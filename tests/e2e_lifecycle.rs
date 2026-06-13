@@ -1,15 +1,17 @@
 //! Black-box end-to-end tests that spawn the compiled `vat` binary in a throwaway
-//! temp directory and drive the documented lifecycle — `init` → `sync` → `start`
-//! → `done` — asserting on stdout, exit codes, and the final on-disk state of
+//! temp directory and exercise the documented lifecycle — `init` → `sync` →
+//! `start` → `done` — asserting on stdout, exit codes, and the on-disk state of
 //! `backlog.md`, `backlog/items/`, and `backlog/.used-ids`.
 //!
 //! These exercise the real binary (via `CARGO_BIN_EXE_vat`, the same pattern as
 //! `tests/completions.rs`) rather than calling library functions, so they pin the
-//! CLI contract from the outside and are insulated from internal refactors.
+//! CLI contract from the outside and are insulated from internal refactors. They
+//! cannot reuse `src/test_support.rs` — that module is `pub(crate)`, reachable
+//! only from in-crate `#[cfg(test)]` unit tests, and its helpers hand-write
+//! backlog files rather than letting the binary create them via `vat init`.
 //!
-//! Every invocation runs with `XDG_CONFIG_HOME` and `HOME` pointed at temp dirs so
-//! user-config resolution is deterministic and never reads or writes the
-//! developer's real `~/.config/vat/config.toml`.
+//! Each independent behavior is its own `#[test]` so an upstream failure (say, a
+//! `sync` regression) can't mask whether `start`/`done` still work.
 //!
 //! @spec CMD-INIT-005, CMD-INIT-001, CMD-CFG-001, CMD-CFG-002, CMD-CFG-003
 //! @spec SYNC-ID-001, SYNC-NOTES-001, SYNC-NOTES-002, CMD-START-001, CMD-START-002, CMD-START-003
@@ -19,6 +21,14 @@ use std::path::PathBuf;
 use std::process::Output;
 
 use tempfile::TempDir;
+
+/// Length of a synced id: `<3-char prefix>-<3-char suffix>`. The suffix length
+/// mirrors `ID_SEGMENT_LEN` in `src/tombstone.rs` (which is `pub(crate)` and so
+/// cannot be imported into this integration-test crate). Derived here rather
+/// than hardcoded so a future suffix-length change has one obvious place to
+/// update the test.
+const ID_SUFFIX_LEN: usize = 3;
+const SYNCED_ID_LEN: usize = "abc-".len() + ID_SUFFIX_LEN;
 
 /// A throwaway project sandbox: a working directory the binary `cd`s into, plus
 /// isolated `XDG_CONFIG_HOME`/`HOME` so user config is deterministic.
@@ -47,17 +57,41 @@ impl World {
         }
     }
 
-    /// Run `vat <args>` with the working directory and config env fixed to this
-    /// sandbox. Env vars are set explicitly so an inherited value from the
-    /// developer's shell cannot leak in.
+    /// Run `vat <args>` in this sandbox.
+    ///
+    /// The child starts from a **cleared** environment (`env_clear`) plus only
+    /// `XDG_CONFIG_HOME`, `HOME`, and `PATH`. Clearing first is what actually
+    /// guarantees isolation: a bare `.env()` only adds/overrides individual
+    /// vars, so any inherited var (a real `HOME`, a stray `VAT_*` override, etc.)
+    /// would still reach the binary. `PATH` is re-added so the loader behaves
+    /// normally; the binary itself is launched by absolute path.
     fn vat(&self, args: &[&str]) -> Output {
-        std::process::Command::new(env!("CARGO_BIN_EXE_vat"))
-            .args(args)
+        let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_vat"));
+        cmd.args(args)
             .current_dir(&self.work)
+            .env_clear()
             .env("XDG_CONFIG_HOME", &self.xdg)
-            .env("HOME", &self.home)
-            .output()
-            .expect("vat binary runs")
+            .env("HOME", &self.home);
+        if let Some(path) = std::env::var_os("PATH") {
+            cmd.env("PATH", path);
+        }
+        cmd.output().expect("vat binary runs")
+    }
+
+    /// Run `vat <args>` as a setup step and assert it succeeded (exit 0). Returns
+    /// the output so callers can also inspect stdout. Guarding setup this way
+    /// means a setup regression fails *here*, with the offending command named,
+    /// rather than surfacing as a confusing panic in a later assertion.
+    fn vat_ok(&self, args: &[&str]) -> Output {
+        let out = self.vat(args);
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "`vat {}` failed: {}",
+            args.join(" "),
+            stderr(&out)
+        );
+        out
     }
 
     fn path(&self, rel: &str) -> PathBuf {
@@ -100,52 +134,65 @@ fn first_bullet_id(backlog_md: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// The full happy-path lifecycle: init → sync → start → done.
+// Lifecycle, one behavior per test so a failure in one phase can't hide the
+// others. Each test re-runs only the setup it needs, with every setup step
+// guarded via `vat_ok`.
 // ---------------------------------------------------------------------------
 
-// @spec CMD-INIT-005, CMD-CFG-003, SYNC-ID-001, SYNC-NOTES-001, SYNC-NOTES-002
-// @spec CMD-START-003, CMD-DONE-001, CMD-DONE-002, CMD-DONE-003, CMD-EXIT-001
+// @spec CMD-INIT-005, CMD-EXIT-001
 #[test]
-fn full_lifecycle_init_sync_start_done() {
+fn init_creates_expected_backlog_structure() {
     let w = World::new();
 
-    // `start` needs a configured user.name; set it first (CMD-CFG-003). The
-    // config lands under the sandbox's XDG dir, not the developer's home.
-    let out = w.vat(&["config", "set", "user.name", "alice"]);
-    assert_eq!(out.status.code(), Some(0), "config set: {}", stderr(&out));
-
-    // --- init (CMD-INIT-005) ---
-    let out = w.vat(&["init", "abc"]);
-    assert_eq!(out.status.code(), Some(0), "init: {}", stderr(&out));
+    let out = w.vat_ok(&["init", "abc"]);
     assert!(
         stdout(&out).contains("initialized backlog/ with prefix abc"),
         "init stdout: {:?}",
         stdout(&out)
     );
 
-    // Initial on-disk state: backlog.md is just the version frontmatter, the
-    // tombstone is empty, and vat.toml records the prefix.
-    assert_eq!(w.read("backlog/backlog.md"), "---\nversion: 1\n---\n");
-    assert_eq!(w.read("backlog/.used-ids"), "");
+    // Structural invariants rather than byte-exact content: a fresh backlog.md
+    // declares version 1 and carries no task bullets yet.
+    let backlog = w.read("backlog/backlog.md");
+    assert!(
+        backlog.contains("version: 1"),
+        "frontmatter declares version 1: {backlog:?}"
+    );
+    assert!(
+        !backlog.contains("- ["),
+        "no id-bearing bullets after init: {backlog:?}"
+    );
+
+    // The tombstone starts empty and vat.toml records the prefix.
+    assert!(
+        w.read("backlog/.used-ids").trim().is_empty(),
+        ".used-ids starts empty"
+    );
     assert!(
         w.read("backlog/vat.toml").contains("id = \"abc\""),
         "vat.toml: {:?}",
         w.read("backlog/vat.toml")
     );
     assert!(w.path("backlog/README.md").exists(), "README.md created");
+}
 
-    // --- author two bullets, one carrying notes ---
+// @spec SYNC-ID-001, SYNC-NOTES-001, SYNC-NOTES-002, CMD-EXIT-001
+#[test]
+fn sync_assigns_ids_and_extracts_notes() {
+    let w = World::new();
+    w.vat_ok(&["init", "abc"]);
     w.append_backlog("- First task\n  some notes here\n- Second task\n");
 
-    // --- sync (SYNC-ID-001, SYNC-NOTES-*) ---
-    let out = w.vat(&["sync"]);
-    assert_eq!(out.status.code(), Some(0), "sync: {}", stderr(&out));
+    w.vat_ok(&["sync"]);
 
     let after_sync = w.read("backlog/backlog.md");
-    // Both bullets now carry an `abc-<3>` id.
-    let id_count = after_sync.matches("- [abc-").count();
-    assert_eq!(id_count, 2, "both bullets assigned ids:\n{after_sync}");
-    // The note line was lifted out of backlog.md...
+    // Both bullets now carry an `abc-<3>` id (SYNC-ID-001).
+    assert_eq!(
+        after_sync.matches("- [abc-").count(),
+        2,
+        "both bullets assigned ids:\n{after_sync}"
+    );
+    // The note line was lifted out of backlog.md (SYNC-NOTES-001)...
     assert!(
         !after_sync.contains("some notes here"),
         "notes extracted from backlog.md:\n{after_sync}"
@@ -153,7 +200,7 @@ fn full_lifecycle_init_sync_start_done() {
 
     let first_id = first_bullet_id(&after_sync);
     assert!(
-        first_id.starts_with("abc-") && first_id.len() == 7,
+        first_id.starts_with("abc-") && first_id.len() == SYNCED_ID_LEN,
         "id shape: {first_id}"
     );
 
@@ -169,42 +216,66 @@ fn full_lifecycle_init_sync_start_done() {
         w.read(&item_rel)
     );
 
-    // Both ids are tombstoned after assignment (SYNC-ID writes .used-ids).
-    let used_after_sync = w.read("backlog/.used-ids");
+    // Both ids are tombstoned after assignment.
+    let used = w.read("backlog/.used-ids");
     assert!(
-        used_after_sync.contains(&first_id),
-        ".used-ids records assigned id {first_id}: {used_after_sync:?}"
+        used.contains(&first_id),
+        ".used-ids records assigned id {first_id}: {used:?}"
     );
     assert_eq!(
-        used_after_sync.lines().count(),
+        used.lines().count(),
         2,
-        "both assigned ids tombstoned: {used_after_sync:?}"
+        "both assigned ids tombstoned: {used:?}"
     );
+}
 
-    // --- start (CMD-START-003) ---
-    let out = w.vat(&["start", &first_id]);
-    assert_eq!(out.status.code(), Some(0), "start: {}", stderr(&out));
-    assert_eq!(stdout(&out).trim(), format!("started {first_id}"));
+// @spec CMD-CFG-003, CMD-START-003, CMD-START-004, CMD-EXIT-001
+#[test]
+fn start_claims_task_with_canonical_markers() {
+    let w = World::new();
+    // `start` needs a configured user.name; set it first (CMD-CFG-003). The
+    // config lands under the sandbox's XDG dir, not the developer's home.
+    w.vat_ok(&["config", "set", "user.name", "alice"]);
+    w.vat_ok(&["init", "abc"]);
+    w.append_backlog("- A task\n");
+    w.vat_ok(&["sync"]);
+    let id = first_bullet_id(&w.read("backlog/backlog.md"));
+
+    let out = w.vat_ok(&["start", &id]);
+    assert_eq!(stdout(&out).trim(), format!("started {id}"));
 
     let after_start = w.read("backlog/backlog.md");
     assert!(
-        after_start.contains(&format!("- [{first_id}] [in-progress] [by:alice]")),
+        after_start.contains(&format!("- [{id}] [in-progress] [by:alice]")),
         "claim markers in canonical order:\n{after_start}"
     );
+}
 
-    // --- done (CMD-DONE-001, CMD-DONE-002, CMD-DONE-003) ---
-    let out = w.vat(&["done", &first_id]);
-    assert_eq!(out.status.code(), Some(0), "done: {}", stderr(&out));
+// @spec CMD-DONE-001, CMD-DONE-002, CMD-DONE-003, CMD-EXIT-001
+#[test]
+fn done_removes_bullet_deletes_item_and_keeps_tombstone() {
+    let w = World::new();
+    w.vat_ok(&["init", "abc"]);
+    w.append_backlog("- First task\n  some notes here\n- Second task\n");
+    w.vat_ok(&["sync"]);
+    let first_id = first_bullet_id(&w.read("backlog/backlog.md"));
+    let item_rel = format!("backlog/items/{first_id}.md");
+    assert!(w.path(&item_rel).exists(), "precondition: item file exists");
+
+    let out = w.vat_ok(&["done", &first_id]);
     assert_eq!(stdout(&out).trim(), format!("done {first_id}"));
 
     let after_done = w.read("backlog/backlog.md");
-    // The completed bullet is gone; the second task survives.
+    // The completed bullet line is gone (CMD-DONE-001). Match the bullet line
+    // specifically rather than the bare id, which could legitimately appear in
+    // another bullet's title text.
     assert!(
-        !after_done.contains(&first_id),
+        !after_done.contains(&format!("- [{first_id}]")),
         "completed bullet removed:\n{after_done}"
     );
-    assert!(
-        after_done.matches("- [abc-").count() == 1,
+    assert_eq!(
+        after_done.matches("- [abc-").count(),
+        1,
         "the other task remains:\n{after_done}"
     );
     // Its item file was deleted (CMD-DONE-002).
@@ -213,10 +284,10 @@ fn full_lifecycle_init_sync_start_done() {
         "item file deleted on done: {item_rel}"
     );
     // The tombstone is retained — done never un-records an id (CMD-DONE-003).
-    let used_after_done = w.read("backlog/.used-ids");
+    let used = w.read("backlog/.used-ids");
     assert!(
-        used_after_done.contains(&first_id),
-        "id stays tombstoned after done: {used_after_done:?}"
+        used.contains(&first_id),
+        "id stays tombstoned after done: {used:?}"
     );
 }
 
@@ -229,8 +300,7 @@ fn full_lifecycle_init_sync_start_done() {
 fn init_twice_fails_with_exit_1() {
     let w = World::new();
 
-    let first = w.vat(&["init", "abc"]);
-    assert_eq!(first.status.code(), Some(0));
+    w.vat_ok(&["init", "abc"]);
 
     let second = w.vat(&["init", "abc"]);
     assert_eq!(second.status.code(), Some(1), "second init must fail");
@@ -245,9 +315,9 @@ fn init_twice_fails_with_exit_1() {
 #[test]
 fn start_without_user_name_fails_with_exit_1() {
     let w = World::new();
-    w.vat(&["init", "abc"]);
+    w.vat_ok(&["init", "abc"]);
     w.append_backlog("- A task\n");
-    assert_eq!(w.vat(&["sync"]).status.code(), Some(0));
+    w.vat_ok(&["sync"]);
     let id = first_bullet_id(&w.read("backlog/backlog.md"));
 
     // No `config set user.name` ran, and HOME/XDG point at empty temp dirs, so
@@ -270,13 +340,13 @@ fn start_without_user_name_fails_with_exit_1() {
 #[test]
 fn start_already_claimed_fails_with_exit_1() {
     let w = World::new();
-    w.vat(&["config", "set", "user.name", "alice"]);
-    w.vat(&["init", "abc"]);
+    w.vat_ok(&["config", "set", "user.name", "alice"]);
+    w.vat_ok(&["init", "abc"]);
     w.append_backlog("- A task\n");
-    w.vat(&["sync"]);
+    w.vat_ok(&["sync"]);
     let id = first_bullet_id(&w.read("backlog/backlog.md"));
 
-    assert_eq!(w.vat(&["start", &id]).status.code(), Some(0));
+    w.vat_ok(&["start", &id]);
 
     let again = w.vat(&["start", &id]);
     assert_eq!(again.status.code(), Some(1), "double-claim must fail");
@@ -291,9 +361,9 @@ fn start_already_claimed_fails_with_exit_1() {
 #[test]
 fn done_unknown_id_fails_with_exit_1_and_writes_nothing() {
     let w = World::new();
-    w.vat(&["init", "abc"]);
+    w.vat_ok(&["init", "abc"]);
     w.append_backlog("- A task\n");
-    w.vat(&["sync"]);
+    w.vat_ok(&["sync"]);
     let before = w.read("backlog/backlog.md");
 
     let out = w.vat(&["done", "abc-zzz"]);
@@ -313,26 +383,20 @@ fn config_roundtrips_user_name_and_reads_project_id() {
     let w = World::new();
 
     // user.name: get before set is empty (exit 0, no output).
-    let unset = w.vat(&["config", "get", "user.name"]);
-    assert_eq!(unset.status.code(), Some(0));
+    let unset = w.vat_ok(&["config", "get", "user.name"]);
     assert!(
         stdout(&unset).trim().is_empty(),
         "unset user.name prints nothing: {:?}",
         stdout(&unset)
     );
 
-    assert_eq!(
-        w.vat(&["config", "set", "user.name", "bob"]).status.code(),
-        Some(0)
-    );
-    let got = w.vat(&["config", "get", "user.name"]);
-    assert_eq!(got.status.code(), Some(0));
+    w.vat_ok(&["config", "set", "user.name", "bob"]);
+    let got = w.vat_ok(&["config", "get", "user.name"]);
     assert_eq!(stdout(&got).trim(), "bob");
 
     // project.id reads back the init prefix.
-    w.vat(&["init", "xyz"]);
-    let pid = w.vat(&["config", "get", "project.id"]);
-    assert_eq!(pid.status.code(), Some(0));
+    w.vat_ok(&["init", "xyz"]);
+    let pid = w.vat_ok(&["config", "get", "project.id"]);
     assert_eq!(stdout(&pid).trim(), "xyz");
 }
 
@@ -342,11 +406,10 @@ fn config_roundtrips_user_name_and_reads_project_id() {
 fn sandboxes_are_isolated_from_each_other_and_real_home() {
     let a = World::new();
     let b = World::new();
-    a.vat(&["config", "set", "user.name", "from-a"]);
+    a.vat_ok(&["config", "set", "user.name", "from-a"]);
 
     // `b` never set a user.name, so its lookup is empty despite `a` setting one.
-    let got = b.vat(&["config", "get", "user.name"]);
-    assert_eq!(got.status.code(), Some(0));
+    let got = b.vat_ok(&["config", "get", "user.name"]);
     assert!(
         stdout(&got).trim().is_empty(),
         "sandbox b must not see sandbox a's config: {:?}",
