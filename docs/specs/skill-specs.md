@@ -23,14 +23,14 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **SKILL-GUARD-001** — While the backlog is a nested repo, when a mutating command starts, the skill shall evaluate the atomicity guard before mutating any file: the `backlog/` working tree is clean (no modified, staged, or untracked files) AND, after a `git fetch`, `HEAD` is an ancestor of the remote-tracking branch (`@{u}`).
 - [ ] **SKILL-GUARD-002** — While the backlog is a nested repo, when the atomicity guard is satisfied, the skill shall run a claim-loop command inside the atomic claim loop (reusing the guard's fetch as the first refresh's fetch), and shall run `config set project.id` through its single-push path (§ `config set project.id`).
 - [ ] **SKILL-GUARD-003** — While the backlog is a nested repo, if the `backlog/` working tree is dirty or `HEAD` has commits the remote-tracking branch lacks, then the skill shall fall back to a local edit: apply the command's file changes exactly as the binary would, perform no `git commit`/`reset`/`push`, and report that the change was not pushed together with the reason (uncommitted changes, or unpushed local commits).
-- [ ] **SKILL-GUARD-004** — While the backlog is a nested repo, if `@{u}` does not resolve (no configured upstream, or detached `HEAD`), then the skill shall abort with the raw git error and shall not mutate any file.
-- [ ] **SKILL-GUARD-005** — While the backlog is a nested repo, if the guard's `git fetch` fails (unreachable remote, auth failure), then the skill shall abort with the raw git error and shall not mutate any file.
+- [ ] **SKILL-GUARD-004** — While the backlog is a nested repo, if `@{u}` does not resolve (no configured upstream, or detached `HEAD`), then the skill shall abort with the raw git error (exit semantics of CMD-EXIT-002) and shall not mutate any file.
+- [ ] **SKILL-GUARD-005** — While the backlog is a nested repo, if the guard's `git fetch` fails (unreachable remote, auth failure), then the skill shall abort with the raw git error (exit semantics of CMD-EXIT-002) and shall not mutate any file.
 
 ## Atomic claim loop
 
 - [ ] **SKILL-LOOP-001** — While the backlog is a nested repo with the atomicity guard satisfied, every claim-loop command shall run the sequence refresh → re-read → terminal-precondition check → mutate → commit → push, with every git command run from inside `backlog/`.
 - [ ] **SKILL-LOOP-002** — The loop's refresh shall be `git fetch` followed by `git reset --hard` to the remote-tracking branch.
-- [ ] **SKILL-LOOP-003** — The loop's commit shall stage all `backlog/` changes and use the command's fixed commit message: `vat sync`, `vat start <id>`, `vat block <id> <blocker-id>`, `vat unblock <id>`, `vat done <id>`, or `vat config set project.id <value>`.
+- [ ] **SKILL-LOOP-003** — The loop's commit shall stage all `backlog/` changes and use the command's fixed commit message: `vat sync`, `vat start <id>`, `vat block <id> <blocker-id>`, `vat unblock <id>`, or `vat done <id>`. (`config set project.id` is not a claim-loop command; its commit message is specified by SKILL-CFG-001.)
 - [ ] **SKILL-LOOP-004** — When the loop's push succeeds, the skill shall report success and stop (first push wins).
 - [ ] **SKILL-LOOP-005** — If the loop's push is rejected as `rejected`/`non-fast-forward` (contention), then the skill shall not rebase or merge; it shall `git reset --hard` to the remote-tracking branch and re-run the decision from scratch on the refreshed state.
 - [ ] **SKILL-LOOP-006** — Between contention retries, the skill shall wait an exponentially increasing backoff with random jitter, and shall cap retries at a fixed maximum attempt count.
@@ -49,6 +49,8 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [ ] **SKILL-TERM-007** — When `block <id> <blocker-id>` finds the task on refreshed state already carrying `[blocked-by:<blocker-id>]` for the same blocker, the skill shall stop reporting success.
 - [ ] **SKILL-TERM-009** — `sync` shall have no terminal precondition; it shall always proceed to mutate on refreshed state.
 - [ ] **SKILL-TERM-010** — Terminal preconditions shall not replace a command's local validation; a validation failure on refreshed state (e.g. `unknown id`, `unknown blocker`) shall abort the command without retrying.
+
+> **Withdrawn ids (intentional gaps).** `SKILL-TERM-003` and `SKILL-TERM-008` are absent by design, not omission. `TERM-003` (`start` on a task already claimed by *me* → success no-op) was **withdrawn**, not deferred: the settled behavior is that *any* existing claim on the refreshed state is a loss (`SKILL-TERM-002`), because the loop never produces a self-claimed refreshed state. `TERM-008` (`config set project.id` already-equal → success) moved to `SKILL-CFG-003` when that command was excluded from the loop. Per the EARS ID-stability rule the numbers are not recycled, so the sequence deliberately skips 003 and 008.
 
 ## `config set project.id` (single push, no claim loop)
 

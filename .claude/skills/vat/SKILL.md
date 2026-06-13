@@ -189,7 +189,7 @@ Why clean-**and**-synced, not just clean: a clean tree can still sit on an unpus
 
 ### The loop (claim-loop commands)
 
-Constants: `MAX = 5` attempts; backoff `sleep = 0.5 * 2^attempt` seconds plus random jitter in `[0, 0.5]s` (≈ 0.5s, 1s, 2s, 4s). With the guard satisfied, from inside `backlog/`:
+Constants: `MAX = 5` attempts; backoff `sleep = 0.5 * 2^(attempt-1)` seconds plus random jitter in `[0, 0.5]s` — i.e. the waits before attempts 2..5 are ≈ 0.5s, 1s, 2s, 4s (`attempt` is incremented before the sleep, so the first retry uses `attempt = 1`). With the guard satisfied, from inside `backlog/`:
 
 ```
 attempt = 0

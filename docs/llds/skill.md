@@ -10,7 +10,7 @@ The binary is the primary distribution, but a coding agent often cannot run it �
 
 Two principles govern the skill:
 
-1. **Fidelity to the specs, not to the binary's code.** The skill implements the same EARS specs (`FMT-*`, `SYNC-*`, `CMD-*`) the binary does. For any input it processes without running the atomic claim loop, it produces file state byte-identical to the binary's. The skill is prose, so its "tests" are the binary's Rust test suite citing the shared spec IDs; the skill itself carries no executable tests.
+1. **Fidelity to the specs, not to the binary's code.** The skill implements the same EARS specs (`FMT-*`, `SYNC-*`, `CMD-*`) the binary does. For any input it processes without running the atomic claim loop, it produces file state byte-identical to the binary's. The skill is prose: its fidelity to the shared `FMT-*`/`SYNC-*`/`CMD-*` specs is covered by the binary's Rust suite citing the same spec IDs, and its own (`SKILL-*`) behavior is exercised by scenario evals in [`.claude/skills/vat/evals/evals.json`](../../.claude/skills/vat/evals/evals.json), run with the skill-creator harness.
 2. **Never write outside the VAT file set.** The skill's `allowed-tools` are `Read, Write, Edit, Bash`. `Bash` exists for `git`, which the skill runs only when operating a nested-repo backlog. The skill mutates exactly the VAT-owned files and runs `git` only inside `backlog/`; it touches nothing else in the working tree.
 
 ## Implementation surface
@@ -47,22 +47,24 @@ loop:
         - satisfied as loss      -> report the loss, stop
         - not satisfied          -> continue
   4. mutate:   apply the command's decision to the files (the same edit the binary makes)
-  5. commit:   git add -A && git commit -m "<fixed per-command message>"
-  6. push:     git push
+  5. no-op check: if the tree is now byte-identical to the refreshed state
+                  -> report `unchanged`, stop (no commit, no push)
+  6. commit:   git add -A && git commit -m "<fixed per-command message>"
+  7. push:     git push
         - success                         -> report success, stop   (first push wins)
         - rejected / non-fast-forward     -> contention: discard local commit and retry
                                              (git reset --hard <remote-tracking-branch>),
                                              attempt += 1; if attempt >= MAX, report
                                              max-attempts exhausted and stop; else backoff
-                                             (sleep base * 2^attempt + jitter) and loop
+                                             (sleep base * 2^(attempt-1) + jitter) and loop
         - any other push failure          -> FAIL FAST: surface the raw git error, stop
 ```
 
-**First push wins.** On a rejected push — and **only** on `rejected` / `non-fast-forward`, i.e. genuine contention — the loser does not rebase or merge. It `reset --hard`s to the winner's state and re-runs the whole decision (steps 1–6) on fresh state. Because the decision is recomputed from scratch each round, there is never a textual merge conflict, not even a false one between two unrelated tasks edited on nearby lines.
+**First push wins.** On a rejected push — and **only** on `rejected` / `non-fast-forward`, i.e. genuine contention — the loser does not rebase or merge. It `reset --hard`s to the winner's state and re-runs the whole decision (steps 1–7) on fresh state. Because the decision is recomputed from scratch each round, there is never a textual merge conflict, not even a false one between two unrelated tasks edited on nearby lines.
 
 **Fail fast on non-contention failures.** A push that fails for network, auth, or quota reasons is not a lost race. The command surfaces the raw git error immediately and does not consume retries — so a "lost claim" report always means a real lost race. A failing `refresh` (e.g. the remote is unreachable) likewise fails fast; the skill does not silently degrade to a local edit, which would let an agent believe a claim landed when it did not.
 
-**Backoff.** Between contention retries the command sleeps `base * 2^attempt` plus random jitter, capped at `MAX` attempts.
+**Backoff.** Between contention retries the command sleeps `base * 2^(attempt-1)` plus random jitter, capped at `MAX` attempts — so with `base = 0.5s` the waits before attempts 2..5 are ≈ 0.5s, 1s, 2s, 4s.
 
 **No-op short-circuit.** If a claim-loop command's mutate step leaves the `backlog/` tree byte-identical — most commonly `sync` with nothing to id or extract (the `SYNC-WRITE` byte-identical skip) — the command reports `unchanged` and makes no commit and no push, so the loop never adds an empty commit to the backlog remote.
 
@@ -146,7 +148,7 @@ On a nested-repo backlog, with the atomicity guard satisfied, it runs a **single
 1. ✅ Atomicity guard is **clean AND synced at entry** (`HEAD` is an ancestor of `@{u}`), with a local-edit-only fallback when `backlog/` is dirty *or* carries unpushed local commits.
 2. ✅ Non-contention git failures — including an unreachable remote and a `backlog/.git` with no upstream / detached HEAD — **fail fast** with the raw git error; no silent local degrade.
 3. ✅ A nested-repo backlog is detected by `backlog/.git` presence, not configuration.
-4. ✅ `start` on a task already claimed by **me** succeeds as a no-op (already yours); only a claim by **another** user is a loss.
+4. ✅ `start` treats **any** existing claim on the refreshed state as a loss (`lost claim: <id> already claimed by <name>`), consistent with `CMD-START-002`. There is no "already mine, succeed" case — see item 8 for why the loop never produces a self-claimed refreshed state.
 5. ✅ `done` on an already-absent task succeeds, but only guarantees removal — out-of-band deletions do not get retro-tombstoned or auto-unblocked. This is scoped to the loop (`.used-ids` consulted on refreshed state); the shared `CMD-*`/binary `done` is unchanged.
 6. ✅ Exit/report semantics for the loop: contention exhausted at `MAX` → user-facing error (exit 1, `CMD-EXIT-002`); non-contention git failure (network/auth/quota/unreachable remote) → also user-facing error (exit 1, `CMD-EXIT-002`), carrying the raw git message.
 7. ✅ The claim loop is the skill's alone — the binary stays unaware of a nested-repo backlog and never runs git. This is a permanent division of labor, not a gap pending binary parity.

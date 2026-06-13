@@ -67,6 +67,7 @@
       "id": 4,
       "eval_name": "start-claims-unclaimed-task",
       "prompt": "/vat start foo-7k2",
+      "harness_note": "vat start reads user.name from ~/.config/vat/config.toml (or $XDG_CONFIG_HOME/vat/config.toml). This eval seeds it at .config/vat/config.toml under the project root, so the harness MUST run the agent with HOME (or XDG_CONFIG_HOME) pointed at the project root; otherwise user.name is unresolved and the eval is non-deterministic.",
       "files": [
         { "path": ".config/vat/config.toml", "content": "[user]\nname = \"jared\"\n" },
         { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
@@ -82,6 +83,7 @@
       "id": 5,
       "eval_name": "start-refuses-already-claimed-task",
       "prompt": "/vat start foo-7k2",
+      "harness_note": "vat start reads user.name from ~/.config/vat/config.toml (or $XDG_CONFIG_HOME/vat/config.toml). This eval seeds it at .config/vat/config.toml under the project root, so the harness MUST run the agent with HOME (or XDG_CONFIG_HOME) pointed at the project root; otherwise user.name is unresolved and the eval is non-deterministic.",
       "files": [
         { "path": ".config/vat/config.toml", "content": "[user]\nname = \"jared\"\n" },
         { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
@@ -128,12 +130,12 @@
         { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
         { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A (see ./items/foo-7k2.md)\n- [foo-9hf] [blocked-by:foo-7k2] task B\n" },
         { "path": "backlog/items/foo-7k2.md", "content": "---\nid: foo-7k2\n---\n\nsome notes for task A\n" },
-        { "path": "backlog/.used-ids", "content": "foo-7k2\nfoo-9hf\n" }
+        { "path": "backlog/.used-ids", "content": "foo-9hf\n" }
       ],
       "assertions": [
         { "text": "The foo-7k2 bullet line has been removed entirely from backlog/backlog.md", "spec_ids": ["CMD-DONE-001"] },
         { "text": "The file backlog/items/foo-7k2.md has been deleted", "spec_ids": ["CMD-DONE-002"] },
-        { "text": "foo-7k2 is present in backlog/.used-ids (it was already there; not duplicated)", "spec_ids": ["CMD-DONE-003"] },
+        { "text": "foo-7k2 has been appended to backlog/.used-ids — it was absent from the seeded file (which held only foo-9hf) and now appears exactly once", "spec_ids": ["CMD-DONE-003"] },
         { "text": "The [blocked-by:foo-7k2] marker has been stripped from the foo-9hf bullet (auto-unblock)", "spec_ids": ["CMD-DONE-004"] }
       ]
     },
