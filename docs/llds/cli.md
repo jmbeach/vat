@@ -47,12 +47,12 @@ Default clap behavior is sufficient: `vat --help`, `vat <subcmd> --help`, `vat -
 
 ## Shell completions
 
-VAT exposes completions via a hidden `vat completions <shell>` subcommand powered by [`clap_complete`](https://docs.rs/clap_complete). Supported shells: `bash`, `zsh`, `fish`.
+VAT exposes completions via a hidden `vat completions <shell>` subcommand powered by [`clap_complete`](https://docs.rs/clap_complete). Supported shells: `bash`, `zsh`, `fish` — exactly these three, even though `clap_complete` itself also generates `elvish` and `powershell`.
 
-- The subcommand is marked `#[command(hide = true)]` so it does not appear in `--help` output.
+- The subcommand is marked `#[command(hide = true)]` so it does not appear in `--help` output. `clap_complete`'s generators ignore `hide`, so the generation path additionally rebuilds the command tree from only the visible subcommands — `completions` never appears in a generated script either.
 - On invocation, completions are written to stdout; the user pipes them to the appropriate location (e.g., `vat completions bash > /etc/bash_completion.d/vat`).
-- Shell values map to `clap_complete::Shell`; unrecognised values produce clap's standard error with exit code 2.
-- The `shell` argument uses `clap_complete::Shell`'s `ValueEnum` derive so clap validates and tab-completes the shell name itself.
+- The `shell` argument is a local `SupportedShell` `ValueEnum` (converted to `clap_complete::Shell` at the call site) so the accepted set is pinned to the spec and a `clap_complete` upgrade cannot widen it silently; unrecognised values produce clap's standard error with exit code 2.
+- Generation goes through `Generator::try_generate` so write failures surface as errors (stderr + exit 2) instead of panicking; a broken pipe (e.g. `vat completions bash | head`) is treated as normal consumer behaviour and exits 0 silently.
 
 ## Decisions & alternatives
 

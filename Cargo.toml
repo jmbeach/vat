@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+# "string" lets cmd_completions rebuild a Command with a runtime-owned name.
+clap = { version = "4", features = ["derive", "string"] }
 clap_complete = "4"
 rand = "0.8"
 serde_yaml = "0.9"

@@ -60,9 +60,10 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## `vat completions <shell>`
 
 - [x] **CMD-COMP-001** — `vat completions <shell>` shall write a shell completion script for `<shell>` to stdout and exit 0.
-- [x] **CMD-COMP-002** — The supported shells shall be `bash`, `zsh`, and `fish`; passing any of these values shall produce non-empty output.
-- [x] **CMD-COMP-003** — The `completions` subcommand shall not appear in the output of `vat --help`.
+- [x] **CMD-COMP-002** — The supported shells shall be exactly `bash`, `zsh`, and `fish`; passing any of these values shall produce non-empty output, and any other shell (including `elvish` and `powershell`, which `clap_complete` itself supports) shall be rejected.
+- [x] **CMD-COMP-003** — The `completions` subcommand shall not appear in the output of `vat --help`, nor as a completable subcommand in any generated completion script.
 - [x] **CMD-COMP-004** — When `<shell>` is not a recognised shell name, the system shall exit with code 2 and print a usage error to stderr.
+- [x] **CMD-COMP-005** — When writing the completion script to stdout fails, the system shall print an error to stderr and exit with code 2, except for a broken pipe, which shall terminate the command silently with exit code 0.
 
 ## Exit codes
 
