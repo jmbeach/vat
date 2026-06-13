@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::Context;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, check_version};
-use crate::cmd_start::{EntryLookup, find_entry_index, serialize_region_with_replaced_bullet};
+use crate::cmd_start::{EntryLookup, find_entry_index};
 use crate::errors::UserError;
 use crate::file_io;
 
@@ -87,7 +87,7 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
     bullet.blocked_by = Some(blocker_lower);
     let new_bullet_line = bullet.serialize();
 
-    let new_parsed = serialize_region_with_replaced_bullet(&region, entry_idx, &new_bullet_line);
+    let new_parsed = region.serialize_with_replaced_bullet(entry_idx, &new_bullet_line);
     let output = bf.serialize(&new_parsed);
     file_io::write(&backlog_path, &output)
         .with_context(|| format!("writing {}", backlog_path.display()))?;
@@ -97,33 +97,15 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::PathBuf;
-
     use tempfile::TempDir;
 
     use super::run;
     use crate::backlog_file::SUPPORTED_MAJOR;
+    use crate::test_support::{HEADER, make_backlog_dir, read_backlog, write_backlog};
 
     // -----------------------------------------------------------------------
-    // Helpers
+    // Helpers (shared ones live in `crate::test_support`)
     // -----------------------------------------------------------------------
-
-    fn make_backlog_dir(dir: &TempDir) -> PathBuf {
-        let backlog = dir.path().join("backlog");
-        fs::create_dir_all(&backlog).unwrap();
-        backlog
-    }
-
-    fn write_backlog(backlog: &std::path::Path, content: &str) {
-        fs::write(backlog.join("backlog.md"), content).unwrap();
-    }
-
-    fn read_backlog(backlog: &std::path::Path) -> String {
-        fs::read_to_string(backlog.join("backlog.md")).unwrap()
-    }
-
-    const HEADER: &str = "---\nversion: 1\n---\n\n";
 
     // Two unblocked tasks: vat-g5y (target) and vat-f1w (blocker).
     fn two_tasks() -> String {

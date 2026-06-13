@@ -66,7 +66,7 @@ fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resul
     bullet.by = Some(user_name);
     let new_bullet_line = bullet.serialize();
 
-    let new_parsed = serialize_region_with_replaced_bullet(&region, entry_idx, &new_bullet_line);
+    let new_parsed = region.serialize_with_replaced_bullet(entry_idx, &new_bullet_line);
     let output = bf.serialize(&new_parsed);
     file_io::write(&backlog_path, &output)
         .with_context(|| format!("writing {}", backlog_path.display()))?;
@@ -145,30 +145,6 @@ fn no_user_name_error() -> anyhow::Error {
     UserError("set user.name first: vat config set user.name <name>".to_owned()).into()
 }
 
-/// Serialize `region` with entry `entry_idx`'s bullet line replaced by `new_bullet_line`.
-/// Notes for every entry are preserved verbatim; the preamble is preserved verbatim.
-///
-/// Shared by every single-bullet-mutating command (`start`, `block`, `unblock`, ...).
-/// vat-m2k will consolidate this single-bullet-replace helper into a common home;
-/// until then it lives here and is reused across commands rather than duplicated.
-pub(crate) fn serialize_region_with_replaced_bullet(
-    region: &ParsedRegion<'_>,
-    entry_idx: usize,
-    new_bullet_line: &str,
-) -> String {
-    let mut out = String::new();
-    out.push_str(region.preamble);
-    for (i, entry) in region.entries.iter().enumerate() {
-        if i == entry_idx {
-            out.push_str(new_bullet_line);
-        } else {
-            out.push_str(entry.bullet_line);
-        }
-        out.push_str(entry.notes);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -178,32 +154,17 @@ mod tests {
 
     use super::run_impl;
     use crate::backlog_file::SUPPORTED_MAJOR;
+    use crate::test_support::{HEADER, make_backlog_dir, read_backlog, write_backlog};
 
     // -----------------------------------------------------------------------
-    // Helpers
+    // Helpers (shared ones live in `crate::test_support`)
     // -----------------------------------------------------------------------
-
-    fn make_backlog_dir(dir: &TempDir) -> PathBuf {
-        let backlog = dir.path().join("backlog");
-        fs::create_dir_all(&backlog).unwrap();
-        backlog
-    }
-
-    fn write_backlog(backlog: &std::path::Path, content: &str) {
-        fs::write(backlog.join("backlog.md"), content).unwrap();
-    }
 
     fn write_user_config(dir: &TempDir, name: &str) -> PathBuf {
         let path = dir.path().join("user_config.toml");
         fs::write(&path, format!("[user]\nname = \"{name}\"\n")).unwrap();
         path
     }
-
-    fn read_backlog(backlog: &std::path::Path) -> String {
-        fs::read_to_string(backlog.join("backlog.md")).unwrap()
-    }
-
-    const HEADER: &str = "---\nversion: 1\n---\n\n";
 
     // -----------------------------------------------------------------------
     // CMD-START-001 — user.name precondition
