@@ -4,7 +4,7 @@
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-12 (git SHA `9dbd445`); counts updated 2026-06-10 by vat-s9g (PR #20). Notes extraction, preconditions, write-skip behavior (vat-t1h), and ID assignment (vat-s9g) are implemented. Pointer suffixes and marker normalization remain gaps; marker normalization is blocked on FMT-MARK-* from `backlog-format`.
+**PARTIAL** — last audited 2026-06-12 (vat-v3k, on top of `03b355d`). Notes extraction (vat-t1h), ID assignment (vat-s9g), and marker normalization + write/idempotence guarantees (vat-v3k) are implemented; `sync.rs` is wired onto `src/bullet.rs` (`Bullet::parse`/`serialize`). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
 
 ## References
 
@@ -15,21 +15,22 @@
 - docs/llds/sync.md
 
 ### EARS
-- docs/specs/sync-specs.md (23 active specs: 15 implemented, 8 gaps; 1 deferred)
+- docs/specs/sync-specs.md (24 active specs: 21 implemented, 3 gaps; 1 deferred)
 
 ### Tests
-- src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/004, SYNC-ID-001/002/004/005/006)
+- src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/003/004, SYNC-MARK-001/002/003/004, SYNC-ID-001/002/004/005/006, FMT-PARSE-006)
 - src/id_assignment.rs (inline `#[cfg(test)]` — unit tests covering SYNC-ID-001/002/003/005/006)
 - src/item_file.rs (inline `#[cfg(test)]` — SYNC-NOTES-004 indentation stripping)
 
 ### Code
-- src/sync.rs — sync engine: ID assignment wiring, notes extraction, preconditions, write-skip, tombstone append (SYNC-ID-004, SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-002/004)
+- src/sync.rs — sync engine: bullet parse/serialize wiring, marker normalization, ID assignment wiring, notes extraction, preconditions, write-skip, tombstone append (SYNC-MARK-*, SYNC-ID-004, SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-*, FMT-PARSE-006)
 - src/id_assignment.rs — ID generation/validation core (SYNC-ID-001/002/003/005/006)
 - src/main.rs — `cmd_sync` dispatches to `sync::run`
 - src/item_file.rs — SYNC-NOTES-004 infrastructure (notes indentation stripping + item file create/append)
 - src/base32.rs — ID generation primitives (used by SYNC-ID-001)
 - src/tombstone.rs — .used-ids read/append (SYNC-ID-002 collision set, SYNC-ID-004 append)
-- src/backlog_file.rs — parsed-region parse/serialize (marker parsing from FMT-MARK-* still required)
+- src/backlog_file.rs — parsed-region parse/serialize
+- src/bullet.rs — bullet-line tokenizer consumed by sync for marker normalization (FMT-MARK-*)
 
 ## Architecture
 
@@ -41,21 +42,22 @@
 3. `src/item_file.rs` — item file create/append and SYNC-NOTES-004 indentation stripping
 4. `src/base32.rs` — random ID generation for SYNC-ID-001
 5. `src/tombstone.rs` — tombstone read/append for SYNC-ID-002 collision avoidance
-6. `src/backlog_file.rs` — task-entry parse/serialize (marker parsing to be added under FMT-MARK-*)
+6. `src/backlog_file.rs` — task-entry parse/serialize
+7. `src/bullet.rs` — bullet-line marker tokenizer (parse/serialize), the canonicalization engine behind SYNC-MARK-*
 
 ## Spec Coverage
 
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
 | ID assignment | SYNC-ID-001 to 006 | 6 | 0 | 0 |
-| Marker normalization | SYNC-MARK-001 to 003 | 0 | 0 | 3 |
+| Marker normalization | SYNC-MARK-001 to 004 | 4 | 0 | 0 |
 | Notes extraction | SYNC-NOTES-001 to 005 | 5 | 0 | 0 |
 | Item-file pointer suffix | SYNC-PTR-001 to 003 | 0 | 0 | 3 |
-| Idempotence / writes | SYNC-WRITE-001 to 004 | 2 | 0 | 2 |
+| Idempotence / writes | SYNC-WRITE-001 to 004 | 4 | 0 | 0 |
 | Preconditions | SYNC-PRE-001 to 002 | 2 | 0 | 0 |
 | Deferred | SYNC-GC-001 | 0 | 1 | 0 |
 
-**Summary:** 15 of 23 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). Notes extraction (vat-t1h) landed the engine and ID assignment (vat-s9g) is wired into it; remaining gaps are pointer suffixes and marker normalization.
+**Summary:** 21 of 24 active specs implemented; 1 deferred (SYNC-GC-001 orphaned-item GC). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
 
 ## Key Findings
 
@@ -63,12 +65,11 @@
 
 2. **ID assignment implemented** — SYNC-ID-001 to 006 (vat-s9g, PR #20): `src/id_assignment.rs` holds the generation/validation core; `sync::run` seeds the collision set from `.used-ids` plus existing region IDs, splices new `[id]` markers in at the front of unid'd bullets, and appends new IDs to `.used-ids` only after a successful `backlog.md` write (SYNC-ID-004).
 
-3. **SYNC-WRITE-001 drift signal** — `src/sync.rs` carries a `@spec SYNC-WRITE-001` test annotation (`run_is_idempotent`), but the spec marker is still `[ ]`. Full idempotence per the spec ("all bullets ID'd, canonical marker order") can't hold until ID assignment and marker normalization land; the test covers the implemented subset only.
+3. **Marker normalization implemented** — SYNC-MARK-001 to 004 and full idempotence (SYNC-WRITE-001) plus all-or-nothing writes (SYNC-WRITE-003) landed via vat-v3k: `sync::run` parses every bullet with `Bullet::parse` and re-emits it via `Bullet::serialize`. Bullet identity now follows the front-loaded parser — an ID-shaped token behind an unknown bracketed token is title text, not the bullet's ID (the interim anywhere-scan `extract_id` was deleted; see the LLD's Decisions section). SYNC-MARK-004: when re-serialization would drop a second `[blocked-by:...]` (FMT-MARK-007), sync warns per dropped target ID via `Bullet::parse_reporting_dropped`, so multi-blocker lines aren't silently truncated on first sync.
 
-4. **Blocked on backlog-format** — SYNC-MARK-001 to 003 (marker normalization) require the marker-token parser that is the primary gap in the `backlog-format` segment. SYNC-PTR-* also needs bullet-title manipulation from the same parser.
+4. **FMT-PARSE-006 wired** — Title-less bullets warn and pass through verbatim (line and note lines preserved), skipped for ID assignment and notes extraction. Malformed bullets are fully inert: their ID-shaped tokens do not seed collision avoidance or duplicate detection.
 
 ## Work Required
 
 ### Must Fix
-1. Implement marker normalization (SYNC-MARK-001 to 003) and pointer suffixes (SYNC-PTR-001 to 003) once `backlog-format` delivers FMT-MARK-001 to 007.
-2. Implement SYNC-WRITE-003 (all-or-nothing writes on error) and flip SYNC-WRITE-001 once full idempotence holds.
+1. Implement item-file pointer suffixes (SYNC-PTR-001 to 003) — the segment's last active gap. `Bullet.title` manipulation via `src/bullet.rs` is now available.

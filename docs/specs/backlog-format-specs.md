@@ -50,11 +50,11 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [x] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
 - [x] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
 - [x] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
-- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
+- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet, and shall make the discarded target IDs available to the caller (so a re-serializing caller such as `vat sync` can warn rather than dropping them silently — see SYNC-MARK-004).
 
 ## Empty and malformed bullets
 
-- [ ] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction. *(Detection exists — `Bullet::parse` returns `EmptyTitle` — but `vat sync` is not yet wired onto it: no warning is printed and a title-less bullet still receives an ID. Remaining work lands with the sync integration, vat-v3k.)*
+- [x] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, leave any note lines following it in place, and skip it for ID assignment and notes extraction.
 
 ## Item files
 

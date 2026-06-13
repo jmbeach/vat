@@ -30,14 +30,33 @@
    The preamble is any content (blank lines, headings, paragraphs, etc.)
    appearing before the first `- ` bullet — see the format LLD's "Preamble" definition.
    For each task_entry capture: bullet_line, notes_lines.
-4. Read .used-ids into a set `used`. Add to it every id currently present in parsed_region.
-5. For each task_entry in order:
+   Parse each bullet_line with the format LLD's greedy front-loaded marker
+   parser ("Bullet line parsing rules"). A bullet whose parse yields an empty
+   title is *malformed*: print a warning naming the line, leave the bullet line
+   and any note lines following it untouched in place, and exclude the entry
+   from every subsequent step (no ID assignment, no notes extraction, no
+   normalization). Malformed bullets are fully inert — an ID-shaped token on a
+   malformed line does not participate in collision seeding (step 4) or
+   duplicate detection; the printed warning is the guard that gets the line
+   fixed.
+4. Read .used-ids into a set `used`. Add to it every id currently present in parsed_region
+   (the parsed `[id]` markers of well-formed bullets; title text is never scanned for IDs).
+5. For each well-formed task_entry in order:
    a. If the bullet has no [id]:
         - Generate a new id: project_prefix + "-" + 3 random Crockford base32 chars,
           retrying until it isn't in `used`. Cap retries at 100; if exceeded, hard error.
         - Add the new id to `used` and to the append-set for .used-ids.
         - Insert the [id] marker at the front of the bullet (before any other markers).
-   b. Normalize markers on the bullet line into canonical order with single-space separators.
+   b. Normalize markers on the bullet line into canonical order with single-space
+      separators, by re-serializing the parsed bullet (format LLD "Bullet line
+      canonical form"). Normalization reorders and respaces markers and lowercases
+      ID values in `[id]` and `[blocked-by:...]` (the alphabet rule: everything VAT
+      writes is lowercase); it never changes which markers are present or their
+      payloads. Per the format LLD's parsing rules, an ID-shaped token that appears
+      after the first unknown bracketed token is title text, not the bullet's ID —
+      `- [TODO] [foo-7k2] title` is a bullet *without* an ID, and sync assigns it a
+      fresh one, front-loaded before `[TODO]`, leaving the title (including the
+      `[foo-7k2]` text) verbatim.
    c. If the entry has notes:
         - Strip indentation (longest common leading-whitespace byte prefix across
           non-blank lines; tab ≠ space) and trim leading/trailing blank lines.
@@ -84,7 +103,10 @@ A second run finds nothing to assign, nothing to extract, and nothing to normali
 - **Bullet without id, with notes**: id is generated; item file is created with notes.
 - **Two bullets share the same id (hand-edit error)**: hard error, abort sync, no writes performed. Message points the user at the offending lines.
 - **Bullet has an id whose project prefix doesn't match `project.id`**: warn, but pass through. (Allows users to import IDs from another project later if needed; v1 just preserves them.)
-- **Empty bullet** (`-` alone): warn, skip the entry, do not assign an id, do not extract any "notes" that follow it. The line is preserved in place.
+- **Empty bullet** (`-` alone, or markers with no title text, e.g. `- [foo-7k2]`): warn, skip the entry, do not assign an id, do not extract any "notes" that follow it. The bullet line *and its note lines* are preserved in place — skipping extraction without preserving the notes would silently destroy them. A marker-only bullet's ID token is inert: it is not seeded into the collision set and does not trigger duplicate-ID detection.
+- **ID-shaped token behind an unknown token** (`- [TODO] [foo-7k2] title`): the token is title text (format LLD parsing rules), so the bullet has no ID and receives a fresh one. The title, including the old token, is preserved verbatim.
+- **Uppercase ID values** (`- [FOO-7K2] title`): rewritten lowercase on normalization, per the alphabet rule that everything VAT writes is lowercase.
+- **Multiple `[blocked-by:...]` on one bullet** (`- [vat-t1h] [blocked-by:vat-f1w] [blocked-by:vat-h8x] title`): only the first survives re-serialization (FMT-MARK-007). Sync warns once per dropped target ID, naming the bullet position and the original line (SYNC-MARK-004) — re-serialization would otherwise silently lose blockers a user listed on purpose. Parsing exposes the discards via `Bullet::parse_reporting_dropped`; the kept blocker is unchanged. (A title-less bullet with multiple blockers is skipped wholesale and passes through verbatim, so no blocker is lost and no drop-warning fires.)
 - **Item file exists but no bullet references it**: not touched. (Could be a stale file from a manual delete; sync doesn't garbage-collect.)
 - **Item file exists, bullet has the id, but the `(see ./items/<id>.md)` suffix is missing or hand-edited away**: sync re-appends the canonical suffix.
 - **Item file does not exist but a `(see ./items/<id>.md)` suffix is present** (e.g., the user manually deleted the item file): sync leaves the suffix alone. Sync never strips information.
@@ -105,5 +127,7 @@ All writes happen at the end, after all parsing and id generation succeed. If an
 
 - **All-or-nothing writes.** Considered streaming line-by-line writes; rejected because a parse failure mid-stream would leave the file half-mutated. The whole-file rewrite is fine for backlog files of any reasonable size.
 - **Retry cap of 100 on id generation.** With 32k-ID space and (say) 1000 used ids, collision probability per try is ~3%; 100 retries is overkill. Cap exists to prevent infinite loops in degenerate cases (project nearing namespace exhaustion).
+- **Bullet identity comes from the front-loaded marker parser, not an anywhere-scan.** An earlier interim implementation found an ID-shaped token anywhere on the line, so `- [TODO] [foo-7k2] title` counted as "has ID foo-7k2". That contradicted the format LLD (markers are front-loaded; the first unknown token starts the title). Sync now uses the shared parser: such a bullet has no ID and gets a fresh one. Cost: a user who relied on a mid-line token being the bullet's identity sees a new ID assigned and the old token demoted to title text — visible in the diff, never destructive (the token text is preserved).
+- **Malformed (title-less) bullets are fully inert.** Their ID-shaped tokens are not seeded into the collision set and don't count for duplicate detection. Seeding them would require a second, looser parse of lines we've declared unparseable; the per-candidate collision odds are 1/32768 against a random draw, and the printed warning drives the human fix. Cost: until the user fixes the line, a fresh assignment could in principle mint the same ID, surfacing as a duplicate-ID error on a later sync.
 - **No garbage collection of orphaned item files.** Keeping it out of v1 because it's risky (silently deleting user content). Could be added as `vat sync --gc` later.
 - **Thematic breaks elsewhere in the parsed region**: the *first* break is the boundary. Any thematic break inside the parsed region truncates parsing at that point. Documented as the known cost of this design choice.

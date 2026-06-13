@@ -20,19 +20,40 @@ pub(crate) struct Bullet {
 }
 
 impl Bullet {
+    /// Parse a bullet line into markers + title, discarding any second
+    /// `[blocked-by:...]` (FMT-MARK-007). Callers that need to know which
+    /// blockers were dropped — so they can warn before destroying data — use
+    /// [`Bullet::parse_reporting_dropped`] instead.
+    pub(crate) fn parse(bullet_line: &str) -> Result<Self, BulletError> {
+        Self::parse_inner(bullet_line).map(|(bullet, _dropped)| bullet)
+    }
+
+    /// Like [`Bullet::parse`], but also returns the target IDs of every
+    /// `[blocked-by:...]` marker that was *discarded* because only the first is
+    /// kept (FMT-MARK-007). The list is empty in the common single-blocker
+    /// case. `vat sync` uses this to warn the user that re-serialization will
+    /// drop the extra blockers, rather than losing them silently (SYNC-MARK-004).
+    // @spec FMT-MARK-007
+    pub(crate) fn parse_reporting_dropped(
+        bullet_line: &str,
+    ) -> Result<(Self, Vec<String>), BulletError> {
+        Self::parse_inner(bullet_line)
+    }
+
     // @spec FMT-MARK-001, FMT-MARK-002, FMT-MARK-003, FMT-MARK-006, FMT-MARK-007, FMT-PARSE-006
     //
     // Greedy front-loaded marker parser. Strips "- " prefix and trailing
     // newline then matches markers left-to-right: as soon as a token does not
     // match any known pattern the rest becomes the title. FMT-MARK-007: a
-    // second [blocked-by:...] is silently skipped (not treated as unknown)
-    // so parsing continues past it and only the first is kept. That is a
+    // second [blocked-by:...] is consumed (not treated as unknown) so parsing
+    // continues past it and only the first is kept; the discarded target IDs
+    // are returned to the caller so the drop need not be silent. That is a
     // deliberate exception: users plausibly list multiple blockers. Duplicates
     // of the single-occurrence markers ([id], [in-progress], [by:...]) instead
     // fall through to FMT-MARK-006 — marker parsing stops and the duplicate
     // starts the title — so hand-typed repetition stays visible rather than
     // being silently discarded.
-    pub(crate) fn parse(bullet_line: &str) -> Result<Self, BulletError> {
+    fn parse_inner(bullet_line: &str) -> Result<(Self, Vec<String>), BulletError> {
         let body = bullet_line.strip_prefix("- ").unwrap_or(bullet_line);
         let body = body.trim_end_matches('\n').trim_end_matches('\r');
 
@@ -41,6 +62,7 @@ impl Bullet {
         let mut in_progress = false;
         let mut by: Option<String> = None;
         let mut blocked_by: Option<String> = None;
+        let mut dropped_blocked_by: Vec<String> = Vec::new();
 
         loop {
             // Tabs count as inter-marker whitespace too; otherwise a tab
@@ -80,6 +102,11 @@ impl Bullet {
             if let Some((mblocker, after)) = try_blocked_by(rest) {
                 if blocked_by.is_none() {
                     blocked_by = Some(mblocker);
+                } else {
+                    // FMT-MARK-007: only the first blocker is kept. Record the
+                    // discards so the caller can warn before the re-serialized
+                    // line silently loses them.
+                    dropped_blocked_by.push(mblocker);
                 }
                 rest = after;
                 continue;
@@ -97,13 +124,16 @@ impl Bullet {
             return Err(BulletError::EmptyTitle);
         }
 
-        Ok(Bullet {
-            id,
-            in_progress,
-            by,
-            blocked_by,
-            title,
-        })
+        Ok((
+            Bullet {
+                id,
+                in_progress,
+                by,
+                blocked_by,
+                title,
+            },
+            dropped_blocked_by,
+        ))
     }
 
     // @spec FMT-MARK-004, FMT-MARK-005, FMT-WS-002
@@ -111,8 +141,12 @@ impl Bullet {
     // Invariant: fields are emitted verbatim, so `id` and `blocked_by` must
     // hold valid `<3>-<3>` lowercase IDs (as produced by `parse`) or the
     // output will not round-trip — re-parsing would demote the marker to
-    // title text per FMT-MARK-006. Callers constructing `Bullet` directly
-    // own that invariant; the debug_asserts catch violations in tests.
+    // title text per FMT-MARK-006. Likewise `title` must be non-empty: an
+    // empty (or whitespace-only) title serializes to a marker-only line that
+    // `parse` then rejects as `EmptyTitle`, so the invariant break would
+    // surface only on the next sync as a spurious "no title" warning. Callers
+    // constructing `Bullet` directly own these invariants; the debug_asserts
+    // catch violations in tests. (`parse` never yields a violating `Bullet`.)
     pub(crate) fn serialize(&self) -> String {
         debug_assert!(
             self.id.as_deref().is_none_or(is_valid_id_inner),
@@ -123,6 +157,11 @@ impl Bullet {
             self.blocked_by.as_deref().is_none_or(is_valid_id_inner),
             "Bullet.blocked_by {:?} is not a valid <3>-<3> id",
             self.blocked_by
+        );
+        debug_assert!(
+            !self.title.trim().is_empty(),
+            "Bullet.title {:?} must not be empty or whitespace-only",
+            self.title
         );
 
         let mut tokens: Vec<String> = Vec::new();
@@ -467,6 +506,30 @@ mod tests {
         assert_eq!(bullet.title, "My task");
     }
 
+    // @spec FMT-MARK-007
+    #[test]
+    fn parse_reporting_dropped_returns_discarded_blockers_in_order() {
+        let (bullet, dropped) = Bullet::parse_reporting_dropped(
+            "- [vat-g5y] [blocked-by:vat-f1w] [blocked-by:vat-h8x] [blocked-by:vat-k2m] title\n",
+        )
+        .unwrap();
+        assert_eq!(bullet.blocked_by, Some("vat-f1w".to_string()));
+        // The first is kept; every later blocker is reported as dropped, in
+        // the order it appeared, lowercased like the kept one.
+        assert_eq!(dropped, vec!["vat-h8x".to_string(), "vat-k2m".to_string()]);
+    }
+
+    // @spec FMT-MARK-007
+    #[test]
+    fn parse_reporting_dropped_is_empty_for_single_blocker() {
+        let (_bullet, dropped) =
+            Bullet::parse_reporting_dropped("- [vat-g5y] [blocked-by:vat-f1w] title\n").unwrap();
+        assert!(
+            dropped.is_empty(),
+            "no discards for a lone blocker: {dropped:?}"
+        );
+    }
+
     // ===================================================================
     // Duplicate single-occurrence markers — unlike [blocked-by:...]
     // (FMT-MARK-007), a repeated [id]/[in-progress]/[by:...] is not
@@ -544,18 +607,25 @@ mod tests {
         assert_eq!(bullet.serialize(), "- [vat-g5y] title\n");
     }
 
-    // @spec FMT-WS-002
+    // serialize invariant — an empty or whitespace-only title would serialize
+    // to a marker-only line that `parse` rejects as `EmptyTitle`. Like the
+    // invalid-id case, that's a caller-construction bug, caught in debug builds
+    // rather than silently emitting a non-round-tripping line. (`parse` never
+    // yields such a `Bullet`.)
+    #[cfg(debug_assertions)]
     #[test]
-    fn serialize_empty_title_emits_no_trailing_space() {
+    #[should_panic(expected = "must not be empty")]
+    fn serialize_panics_in_debug_on_empty_title() {
         let bullet = b(Some("vat-g5y"), false, None, None, "");
-        assert_eq!(bullet.serialize(), "- [vat-g5y]\n");
+        bullet.serialize();
     }
 
-    // @spec FMT-WS-002
+    #[cfg(debug_assertions)]
     #[test]
-    fn serialize_whitespace_only_title_emits_no_trailing_space() {
+    #[should_panic(expected = "must not be empty")]
+    fn serialize_panics_in_debug_on_whitespace_only_title() {
         let bullet = b(Some("vat-g5y"), true, None, None, "   ");
-        assert_eq!(bullet.serialize(), "- [vat-g5y] [in-progress]\n");
+        bullet.serialize();
     }
 
     // serialize invariant — invalid stored ids are a caller bug, caught in
