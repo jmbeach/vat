@@ -3,6 +3,7 @@ mod base32;
 mod bullet;
 mod cmd_completions;
 mod cmd_config;
+mod cmd_done;
 mod cmd_init;
 mod cmd_start;
 mod errors;
@@ -100,7 +101,7 @@ fn main() {
         Commands::Start { id } => cmd_start(&id),
         Commands::Block { id, blocker_id } => cmd_block(id, blocker_id),
         Commands::Unblock { id } => cmd_unblock(id),
-        Commands::Done { id } => cmd_done(id),
+        Commands::Done { id } => cmd_done(&id),
         Commands::Config { action } => match action {
             ConfigAction::Get { key } => cmd_config_get(&key),
             ConfigAction::Set { key, value } => cmd_config_set(&key, &value),
@@ -182,9 +183,16 @@ fn cmd_unblock(_id: String) {
     std::process::exit(1);
 }
 
-fn cmd_done(_id: String) {
-    eprintln!("vat done: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-DONE-001, CMD-DONE-002, CMD-DONE-003, CMD-DONE-004, CMD-DONE-005
+fn cmd_done(id: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    match cmd_done::run(id, backlog_dir) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(classify_exit_code(&e));
+        }
+    }
 }
 
 // @spec CMD-CFG-001, CMD-CFG-002
