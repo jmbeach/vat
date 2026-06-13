@@ -91,7 +91,10 @@ fn mask_ids(s: &str) -> String {
             i += 1;
         }
     }
-    String::from_utf8(out).expect("fixture content is ascii")
+    // The loop only ever swaps one ASCII run (`vat-xxx`) for another, so valid
+    // UTF-8 in → valid UTF-8 out; the constraint is UTF-8, not ASCII (task
+    // titles may carry accented characters).
+    String::from_utf8(out).expect("utf-8 fixture content stays utf-8 after id masking")
 }
 
 /// Copy `<fixture>/input` into a fresh tempdir's `backlog/` and return the dir.
@@ -106,10 +109,18 @@ fn prepare(fixture: &str) -> TempDir {
 
 /// Run the real `vat sync` with `tmp` as the working directory; assert it
 /// exits 0 (`cmd_sync` resolves `backlog/` relative to the cwd).
+///
+/// `HOME` and `XDG_CONFIG_HOME` are pointed inside the tempdir (the same
+/// isolation PR #56 established for e2e invocations) so user-config resolution
+/// is deterministic and never reads or writes the developer's real
+/// `~/.config/vat/`. `vat sync` does not read user config today, but the
+/// isolation keeps these tests environment-independent if it ever starts to.
 fn run_sync(tmp: &TempDir) {
     let out = Command::new(env!("CARGO_BIN_EXE_vat"))
         .arg("sync")
         .current_dir(tmp.path())
+        .env("HOME", tmp.path())
+        .env("XDG_CONFIG_HOME", tmp.path().join(".config"))
         .output()
         .expect("vat binary runs");
     assert_eq!(
@@ -120,16 +131,24 @@ fn run_sync(tmp: &TempDir) {
     );
 }
 
-/// Assert the post-sync `backlog/` tree equals `<fixture>/expected`, optionally
-/// masking assigned ids in both sides first.
-fn assert_matches_expected(tmp: &TempDir, fixture: &str, mask: bool) {
+/// Whether a fixture's ids are freshly minted by sync — random, so they must be
+/// masked before the byte-comparison (SYNC-ID-001) — or already present in the
+/// input, in which case the tree is compared exactly.
+#[derive(Clone, Copy)]
+enum Ids {
+    Fresh,
+    PreExisting,
+}
+
+/// Assert the post-sync `backlog/` tree equals `<fixture>/expected`. For
+/// [`Ids::Fresh`] fixtures, assigned ids are masked on both sides first.
+fn assert_matches_expected(tmp: &TempDir, fixture: &str, ids: Ids) {
     let actual = snapshot(&tmp.path().join("backlog"));
     let expected = snapshot(&fixtures_root().join(fixture).join("expected"));
     let normalize = |m: BTreeMap<String, String>| -> BTreeMap<String, String> {
-        if mask {
-            m.into_iter().map(|(k, v)| (k, mask_ids(&v))).collect()
-        } else {
-            m
+        match ids {
+            Ids::Fresh => m.into_iter().map(|(k, v)| (k, mask_ids(&v))).collect(),
+            Ids::PreExisting => m,
         }
     };
     assert_eq!(
@@ -140,10 +159,10 @@ fn assert_matches_expected(tmp: &TempDir, fixture: &str, mask: bool) {
 }
 
 /// Copy the fixture in, run sync once, and assert the result matches.
-fn check(fixture: &str, mask: bool) {
+fn check(fixture: &str, ids: Ids) {
     let tmp = prepare(fixture);
     run_sync(&tmp);
-    assert_matches_expected(&tmp, fixture, mask);
+    assert_matches_expected(&tmp, fixture, ids);
 }
 
 // ── brand-new bullets get IDs assigned ───────────────────────────────────────
@@ -154,7 +173,7 @@ fn check(fixture: &str, mask: bool) {
 // @spec SYNC-ID-001, SYNC-ID-004
 #[test]
 fn golden_new_bullets_get_ids_assigned() {
-    check("new-bullets", true);
+    check("new-bullets", Ids::Fresh);
 }
 
 // ── idempotent re-run: the second sync is a no-op ────────────────────────────
@@ -171,7 +190,7 @@ fn golden_second_sync_is_a_noop() {
         after_first, after_second,
         "the second sync must change nothing"
     );
-    assert_matches_expected(&tmp, "idempotent", false);
+    assert_matches_expected(&tmp, "idempotent", Ids::PreExisting);
 }
 
 // ── notes append to an existing item file ────────────────────────────────────
@@ -179,7 +198,7 @@ fn golden_second_sync_is_a_noop() {
 // @spec SYNC-NOTES-001, SYNC-NOTES-003
 #[test]
 fn golden_notes_append_to_existing_item_file() {
-    check("notes-append", false);
+    check("notes-append", Ids::PreExisting);
 }
 
 // ── whitespace-only notes are dropped, no item file created ──────────────────
@@ -188,12 +207,26 @@ fn golden_notes_append_to_existing_item_file() {
 #[test]
 fn golden_whitespace_only_notes_dropped_and_no_item_file() {
     let tmp = prepare("whitespace-notes");
+    // The whitespace-only note line is appended HERE rather than stored in the
+    // fixture: a line of literal trailing spaces is exactly what editors and
+    // `core.whitespace` settings silently strip, which would turn it into a
+    // blank line (a bullet-block terminator) and quietly stop testing
+    // SYNC-NOTES-005. Synthesizing it at runtime makes the test robust.
+    let backlog_md = tmp.path().join("backlog/backlog.md");
+    let mut content = fs::read_to_string(&backlog_md).expect("read fixture backlog.md");
+    assert!(
+        content.ends_with("- [vat-t1h] Title\n"),
+        "fixture should end with the bare bullet; got: {content:?}"
+    );
+    content.push_str("   \n"); // three-space, whitespace-only note line
+    fs::write(&backlog_md, &content).expect("write whitespace note");
+
     run_sync(&tmp);
     assert!(
         !tmp.path().join("backlog/items").exists(),
         "whitespace-only notes must not create an items/ dir or file"
     );
-    assert_matches_expected(&tmp, "whitespace-notes", false);
+    assert_matches_expected(&tmp, "whitespace-notes", Ids::PreExisting);
 }
 
 // ── dangling blocked-by marker is left alone ─────────────────────────────────
@@ -201,7 +234,7 @@ fn golden_whitespace_only_notes_dropped_and_no_item_file() {
 // @spec SYNC-MARK-003
 #[test]
 fn golden_dangling_blocked_by_left_alone() {
-    check("dangling-blocked-by", false);
+    check("dangling-blocked-by", Ids::PreExisting);
 }
 
 // ── frontmatter is preserved verbatim while notes are extracted ──────────────
@@ -211,5 +244,5 @@ fn golden_dangling_blocked_by_left_alone() {
 // @spec SYNC-NOTES-002
 #[test]
 fn golden_frontmatter_preserved() {
-    check("frontmatter-preserved", false);
+    check("frontmatter-preserved", Ids::PreExisting);
 }
