@@ -49,6 +49,24 @@ backlog/
 
 Every command is a one-shot read → mutate → write cycle on these files. Concurrency between collaborators is resolved by git: claims and edits land as line-level diffs that merge cleanly when disjoint and produce conflicts when not.
 
+### Implementations
+
+VAT has two first-class implementations of the same intent:
+
+- **The Rust binary** (`src/`) — the primary distribution.
+- **The `vat` skill** (`.claude/skills/vat/SKILL.md`) — a prose implementation an agent follows directly. A remote coding agent is handed the whole skill and operates a VAT backlog with zero install (no `cargo`, no binary), which the binary cannot offer. Its design lives in [the skill LLD](llds/skill.md).
+
+Both implementations target the same EARS specs. Where a spec is implemented by only one of them, its status reflects that.
+
+### Backlog as a nested repo
+
+A `backlog/` can itself be a git repository — a submodule, or a standalone clone an agent pulls — rather than being tracked by the outer project repo. This is a property of the backlog's layout, not a mode VAT switches into:
+
+- **The binary is unaware of it.** It edits the markdown files in place regardless; committing and pushing the backlog repo is the collaborator's concern, exactly as for any backlog (Decision #1). A human running the binary against a nested-repo backlog is their own retry loop — they push, and on a rejected push they pull and re-run.
+- **The skill detects it** (`backlog/.git` present) and, because an autonomous agent has no human to drive git, runs an **atomic claim loop** against the backlog's own remote (see Decision #7). This is what makes parallel agents practical — each agent claims tasks against a shared backlog remote without a coordinating server.
+
+The two can share one backlog: a human on the binary and an agent on the skill coordinate at the git remote, not in the tool.
+
 ### File formats
 
 **`backlog/backlog.md`** — markdown. Everything above the first `---` horizontal rule is parsed; everything below is freeform. Parsed content is a flat list of top-level `-` bullets. Nested bullets and indented prose under a bullet are "notes" — they're moved into the item file on `vat sync`.
@@ -150,11 +168,28 @@ Markers all live at the front of the bullet, in the order `[id] [in-progress] [b
 
 **Consequence:** `vat sync` must normalize order if a user hand-edits markers out of position. Easy.
 
+### 7. First-push-wins claim loop for nested-repo backlogs
+
+When the backlog is its own git repo, the `vat` skill claims and completes tasks against a shared backlog remote without a server and without textual merge conflicts. (The binary is unaware of the nested repo and never does this — a human driving the binary is their own retry loop.) Every atomic, mutating task command the skill runs (`sync`, `start`, `block`, `unblock`, `done`) goes through an **atomic claim loop** — `refresh → re-read → check terminal precondition → mutate → commit → push`, with all git run from inside `backlog/`:
+
+- **First push wins.** On a rejected push — and *only* on `rejected` / `non-fast-forward`, i.e. genuine contention — the loser does **not** rebase or merge. It `reset --hard`s to the winner's state and **re-runs the decision from scratch** on the fresh state. There is never a textual merge conflict, not even a false one between two tasks edited on nearby lines.
+- **Atomicity guard.** The loop's `reset --hard` is destructive, so it only runs when `backlog/` is **clean *and* synced at entry** — the skill's own mutation is the sole change it will ever discard on a reset. If `backlog/` has *any* uncommitted or untracked changes when the command starts (the user is mid-grooming, staging several new tasks, etc.), **or** carries a local commit the remote lacks (the branch is ahead of origin — which `reset --hard` would also destroy), the skill falls back to a **local edit**: it makes the change on disk and does no commit/reset/push, so unrelated in-flight work is never blown away. The user syncs that batch themselves (e.g. the `backlog-sync` skill).
+- **Fail fast on non-contention errors.** Network/auth/quota push failures surface the raw git error immediately and do not consume retries — a lost-race report must mean a real lost race.
+- **Terminal precondition ends retries early.** Per command: `start` on an already-claimed task on fresh state → `lost claim: <id> already claimed by <name>`, stop. `done` on an already-absent task → success. `sync` has no terminal precondition. The terminal condition *is* the lock telling you the outcome.
+- **Backoff + jitter** between retries, capped at a MAX attempt count.
+- **Fixed per-command commit messages** (`vat sync`, `start <id>`, `done <id>`, …) so the backlog remote's history is auditable.
+- **`config set project.id` is outside the loop.** Re-prefixing is a rare administrative operation guarded locally (`CMD-CFG-005`); the skill commits and pushes it once and fails fast on a rejected push rather than re-deciding the re-prefix against a winner's fresh state.
+
+**Consequence:** Safe, server-less parallel task claiming for agent fleets.
+**Consequence:** Only the *atomic* case (clean backlog tree, single skill mutation) is auto-pushed; batched human grooming stays local until explicitly synced. The guard keeps the destructive `reset --hard` path from ever touching unrelated work.
+**Consequence:** The loop requires the backlog remote to be reachable; when `refresh` or `push` fails for a non-contention reason (network/auth/quota), the command fails fast with the raw git error rather than silently editing locally, so an agent never believes a claim landed when it did not.
+
 ## Trade-offs explicitly considered
 
 | Decision | Picked | Rejected | Why |
 |---|---|---|---|
-| Concurrency model | Local check + git merge | Git-aware claim, lockfile dir | Lightweight; no network; markdown stays the truth |
+| Concurrency (any backlog) | Local check + git merge | Git-aware claim, lockfile dir | Lightweight; no network; markdown stays the truth |
+| Skill claiming on a nested-repo backlog | Atomic first-push-wins loop (reset + re-decide) | Textual merge / rebase the loser's change | No false conflicts between disjoint tasks; server-less parallel claiming; guard keeps reset from touching unrelated work |
 | Ingest model | Explicit `vat sync` | Implicit on every command | Predictable diffs |
 | ID scheme | `<3-char-project>-<3-char-base32>` | Word pairs, sequential | Typeable, scoped across repos, merges cleanly |
 | ID reuse | Tombstone file | Reuse freely; git history scan | Cheap, robust referenceability |
