@@ -42,8 +42,8 @@ arrows:
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
-    next: "Implement start, block, unblock, done — blocked on FMT-MARK-*. Exit codes (CMD-EXIT-001..003) implemented for cmd_config; thread classify_exit_code through cmd_init/cmd_sync."
-    drift: "classify_exit_code() wired only through cmd_config_get/cmd_config_set; cmd_init and cmd_sync still exit 1 for all errors. CMD-EXIT-003 ([x]) requires every command to route through classification."
+    next: "Implement block and unblock using the existing find_entry_index helper. Thread classify_exit_code through cmd_init/cmd_sync for CMD-EXIT-003."
+    drift: "classify_exit_code() wired through cmd_config/cmd_start/cmd_done but not cmd_init or cmd_sync, which still exit 1 for all errors. CMD-EXIT-003 ([x]) requires every command to route through classification."
 
   cli:
     status: MAPPED
