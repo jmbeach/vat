@@ -127,16 +127,12 @@ mod tests {
     use tempfile::TempDir;
 
     use super::{get_impl, ids_exist_with_prefix, set_impl};
+    use crate::test_support::make_backlog_dir;
 
     // -----------------------------------------------------------------------
-    // Helpers
+    // Helpers (shared `make_backlog_dir` lives in `crate::test_support`; the
+    // config-specific helpers below stay local)
     // -----------------------------------------------------------------------
-
-    fn make_backlog_dir(dir: &TempDir) -> PathBuf {
-        let backlog = dir.path().join("backlog");
-        fs::create_dir_all(&backlog).unwrap();
-        backlog
-    }
 
     fn write_vat_toml(backlog: &Path, prefix: &str) {
         fs::write(

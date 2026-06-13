@@ -284,6 +284,28 @@ impl<'a> ParsedRegion<'a> {
         }
         out
     }
+
+    /// Serialize the region with the entry at `entry_idx`'s bullet line replaced
+    /// by `new_bullet_line`. Notes for every entry, and the preamble, are
+    /// preserved verbatim.
+    // @spec FMT-PARSE-005
+    pub(crate) fn serialize_with_replaced_bullet(
+        &self,
+        entry_idx: usize,
+        new_bullet_line: &str,
+    ) -> String {
+        let mut out = String::new();
+        out.push_str(self.preamble);
+        for (i, entry) in self.entries.iter().enumerate() {
+            if i == entry_idx {
+                out.push_str(new_bullet_line);
+            } else {
+                out.push_str(entry.bullet_line);
+            }
+            out.push_str(entry.notes);
+        }
+        out
+    }
 }
 
 fn parse_task_entries(rest: &str) -> Vec<TaskEntry<'_>> {
