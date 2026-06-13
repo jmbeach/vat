@@ -1,6 +1,7 @@
 mod backlog_file;
 mod base32;
 mod bullet;
+mod cmd_completions;
 mod cmd_config;
 mod cmd_init;
 mod errors;
@@ -16,6 +17,8 @@ mod user_config;
 use std::io::{self, Write as _};
 
 use clap::{Parser, Subcommand};
+
+use crate::cmd_completions::SupportedShell;
 
 #[derive(Parser)]
 #[command(
@@ -63,6 +66,13 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Generate shell completions and write them to stdout
+    // @spec CMD-COMP-003
+    #[command(hide = true)]
+    Completions {
+        /// Shell to generate completions for
+        shell: SupportedShell,
+    },
 }
 
 #[derive(Subcommand)]
@@ -94,6 +104,21 @@ fn main() {
             ConfigAction::Get { key } => cmd_config_get(&key),
             ConfigAction::Set { key, value } => cmd_config_set(&key, &value),
         },
+        // @spec CMD-COMP-001, CMD-COMP-002
+        Commands::Completions { shell } => cmd_completions(shell),
+    }
+}
+
+// @spec CMD-COMP-001, CMD-COMP-005
+fn cmd_completions(shell: SupportedShell) {
+    if let Err(e) = cmd_completions::run(shell) {
+        // A consumer closing the pipe early (`vat completions bash | head`)
+        // is normal, not an error.
+        if e.kind() == io::ErrorKind::BrokenPipe {
+            return;
+        }
+        eprintln!("error: failed to write completions: {e}");
+        std::process::exit(2);
     }
 }
 
