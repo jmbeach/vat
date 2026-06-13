@@ -1,6 +1,6 @@
-//! Shared helpers for the command unit-test modules (`cmd_start`, `cmd_block`,
-//! `cmd_unblock`, `cmd_done`). Compiled only under `cfg(test)`. Command-specific
-//! helpers (e.g. `write_user_config`, `write_item`) stay local to their module.
+//! Shared helpers for command unit-test modules. Compiled only under `cfg(test)`.
+//! Command-specific helpers (e.g. `write_user_config`, `write_item`) stay local
+//! to their module.
 
 use std::path::{Path, PathBuf};
 

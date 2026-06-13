@@ -26,9 +26,7 @@ use clap::{Parser, Subcommand};
 
 use crate::cmd_completions::SupportedShell;
 
-/// The backlog directory, relative to the current working directory. Every
-/// bullet-reading/-mutating command resolves its files under it; a single
-/// constant means a rename touches one site, not one per command.
+/// Backlog subdirectory, relative to the current working directory.
 const BACKLOG_DIR: &str = "backlog";
 
 #[derive(Parser)]

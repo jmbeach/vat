@@ -288,10 +288,6 @@ impl<'a> ParsedRegion<'a> {
     /// Serialize the region with the entry at `entry_idx`'s bullet line replaced
     /// by `new_bullet_line`. Notes for every entry, and the preamble, are
     /// preserved verbatim.
-    ///
-    /// The shared single-bullet-replace emitter for every command that mutates
-    /// exactly one bullet in place (`start`, `block`, `unblock`). `done`, which
-    /// drops an entry and re-emits others, has its own region walk.
     // @spec FMT-PARSE-005
     pub(crate) fn serialize_with_replaced_bullet(
         &self,
