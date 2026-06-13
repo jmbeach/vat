@@ -97,7 +97,7 @@ fn main() {
     match cli.command {
         Commands::Init { prefix } => cmd_init(prefix),
         Commands::Sync => cmd_sync(),
-        Commands::Start { id } => cmd_start(id),
+        Commands::Start { id } => cmd_start(&id),
         Commands::Block { id, blocker_id } => cmd_block(id, blocker_id),
         Commands::Unblock { id } => cmd_unblock(id),
         Commands::Done { id } => cmd_done(id),
@@ -161,11 +161,14 @@ fn cmd_sync() {
 }
 
 // @spec CMD-START-001, CMD-START-002, CMD-START-003
-fn cmd_start(id: String) {
+fn cmd_start(id: &str) {
     let backlog_dir = std::path::Path::new("backlog");
-    if let Err(e) = cmd_start::run(&id, backlog_dir) {
-        eprintln!("error: {e:#}");
-        std::process::exit(classify_exit_code(&e));
+    match cmd_start::run(id, backlog_dir) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(classify_exit_code(&e));
+        }
     }
 }
 

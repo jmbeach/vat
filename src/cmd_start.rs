@@ -1,45 +1,58 @@
-// @spec CMD-START-001, CMD-START-002, CMD-START-003, CMD-CC-001, CMD-CC-002, CMD-CC-003
+// @spec CMD-START-001, CMD-START-002, CMD-START-003, CMD-START-004, CMD-CC-001, CMD-CC-002, CMD-CC-003, CMD-CC-004
 
 use std::path::Path;
 
 use anyhow::Context;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, check_version};
-use crate::bullet::Bullet;
+use crate::bullet::{Bullet, BulletError};
 use crate::errors::UserError;
 use crate::file_io;
 use crate::user_config;
 
-/// Mark `id` as in-progress, claimed by the configured user.
-// @spec CMD-START-001, CMD-START-002, CMD-START-003
-pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<()> {
+/// Mark `id` as in-progress, claimed by the configured user. Returns the
+/// user-facing confirmation message on success.
+// @spec CMD-START-001, CMD-START-002, CMD-START-003, CMD-START-004
+pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     let user_cfg_path = user_config::config_path()?;
     run_impl(id, backlog_dir, &user_cfg_path)
 }
 
 // Testable inner implementation with an explicit user config path.
-fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Result<()> {
-    // CMD-START-001: resolve user.name; abort if unset.
-    let user_name = resolve_user_name(user_cfg_path)?;
-
+fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Result<String> {
     let backlog_path = backlog_dir.join("backlog.md");
     let input = file_io::read_to_string(&backlog_path)
         .with_context(|| format!("reading {}", backlog_path.display()))?;
 
     let bf = BacklogFile::parse(&input);
 
-    // CMD-CC-001: version gate before any other processing.
+    // CMD-CC-001: version gate before any other processing — in particular
+    // before resolving user.name, so an unsupported backlog reports the
+    // version error rather than a "set user.name" hint.
     check_version(bf.frontmatter()).context("backlog version check")?;
+
+    // CMD-START-001: resolve user.name; abort if unset.
+    let user_name = resolve_user_name(user_cfg_path)?;
 
     let id_lower = id.to_lowercase();
     let region = ParsedRegion::parse(bf.parsed());
 
-    // CMD-CC-002: locate the matching entry; abort without writes if not found.
-    let entry_idx = find_entry_index(&region, &id_lower)
-        .ok_or_else(|| UserError(format!("unknown id: {id}")))?;
+    // CMD-CC-002 / CMD-CC-004: locate the matching entry; abort without writes
+    // if not found, or with the parse failure if the bullet is present but
+    // malformed.
+    let entry_idx = match find_entry_index(&region, &id_lower) {
+        EntryLookup::Found(idx) => idx,
+        EntryLookup::Malformed(err) => {
+            return Err(UserError(format!(
+                "{id} found but its bullet could not be parsed: {err}"
+            ))
+            .into());
+        }
+        EntryLookup::NotFound => return Err(UserError(format!("unknown id: {id}")).into()),
+    };
 
     let mut bullet = Bullet::parse(region.entries[entry_idx].bullet_line)
-        .expect("entry bullet must parse: it was just located by ID");
+        .expect("entry bullet must parse: find_entry_index only returns parsable entries");
 
     // CMD-START-002: refuse on partial-or-full claim.
     if bullet.in_progress || bullet.by.is_some() {
@@ -61,25 +74,57 @@ fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resul
     file_io::write(&backlog_path, &output)
         .with_context(|| format!("writing {}", backlog_path.display()))?;
 
-    Ok(())
+    // CMD-START-004: confirm the claim, mirroring `vat init`'s success message.
+    Ok(format!("started {id_lower}"))
 }
 
-/// Find the index of the entry in `region` whose parsed bullet carries the given
-/// (already-lowercased) `id`.
+/// Outcome of scanning a region for a bullet carrying a given id.
+// @spec CMD-CC-002, CMD-CC-004
+pub(crate) enum EntryLookup {
+    /// A well-formed bullet carries the id; payload is its entry index.
+    Found(usize),
+    /// A bullet line carries the id token but failed to parse.
+    Malformed(BulletError),
+    /// No bullet carries the id.
+    NotFound,
+}
+
+/// Locate the entry in `region` whose bullet carries the given (already-lowercased)
+/// `id_lower`.
 ///
 /// This is the lookup half of the `find_entry` helper described in the commands LLD:
 /// "All bullet-mutating commands share a helper: `fn find_entry(id) -> (parsed_region,
 /// entry_index)`". The parsed-region half lives at the call site (which holds the
 /// borrowed string); this function handles only the index-location part.
-// @spec CMD-CC-002
-pub(crate) fn find_entry_index(region: &ParsedRegion<'_>, id_lower: &str) -> Option<usize> {
-    region.entries.iter().position(|e| {
-        Bullet::parse(e.bullet_line)
-            .ok()
-            .and_then(|b| b.id)
-            .as_deref()
-            == Some(id_lower)
-    })
+///
+/// CMD-CC-004: a bullet line whose leading id marker matches `id_lower` but which
+/// fails to parse (e.g. `- [vat-g5y]` with no title) is reported as `Malformed`
+/// rather than silently skipped — otherwise the user sees a misleading "unknown id"
+/// for an id plainly visible in the file.
+// @spec CMD-CC-002, CMD-CC-004
+pub(crate) fn find_entry_index(region: &ParsedRegion<'_>, id_lower: &str) -> EntryLookup {
+    for (idx, e) in region.entries.iter().enumerate() {
+        match Bullet::parse(e.bullet_line) {
+            Ok(b) if b.id.as_deref() == Some(id_lower) => return EntryLookup::Found(idx),
+            Err(err) if bullet_line_carries_id(e.bullet_line, id_lower) => {
+                return EntryLookup::Malformed(err);
+            }
+            Ok(_) | Err(_) => {}
+        }
+    }
+    EntryLookup::NotFound
+}
+
+/// True when the bullet line's leading `[id]` marker equals `id_lower`.
+///
+/// Used only on the parse-failure path: it mirrors `Bullet::parse`'s prefix
+/// stripping so that a malformed bullet can still be attributed to its id. The
+/// check is anchored to the leading marker so an `id` appearing elsewhere (e.g.
+/// inside `[blocked-by:...]`) does not produce a false attribution.
+fn bullet_line_carries_id(bullet_line: &str, id_lower: &str) -> bool {
+    let body = bullet_line.strip_prefix("- ").unwrap_or(bullet_line);
+    let body = body.trim_start_matches([' ', '\t']);
+    body.to_lowercase().starts_with(&format!("[{id_lower}]"))
 }
 
 // @spec CMD-START-001
@@ -217,6 +262,33 @@ mod tests {
         );
     }
 
+    // @spec CMD-CC-001
+    #[test]
+    fn start_reports_version_error_before_user_name_when_both_fail() {
+        // CMD-CC-001: the version gate runs "before any other processing", so an
+        // unsupported backlog combined with a missing user.name must surface the
+        // version error, not the "set user.name" hint.
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        let future = SUPPORTED_MAJOR + 1;
+        write_backlog(
+            &backlog,
+            &format!("---\nversion: {future}\n---\n- [vat-g5y] A task\n"),
+        );
+        let missing = dir.path().join("nonexistent.toml");
+
+        let err = run_impl("vat-g5y", &backlog, &missing).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("version") || msg.contains("upgrade"),
+            "expected version error to win over user.name hint: {msg}"
+        );
+        assert!(
+            !msg.contains("user.name"),
+            "user.name hint must not pre-empt the version gate: {msg}"
+        );
+    }
+
     // -----------------------------------------------------------------------
     // CMD-CC-002 — unknown ID
     // -----------------------------------------------------------------------
@@ -251,6 +323,45 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // CMD-CC-004 — malformed bullet for a present id
+    // -----------------------------------------------------------------------
+
+    // @spec CMD-CC-004
+    #[test]
+    fn start_reports_parse_error_when_bullet_present_but_malformed() {
+        // `- [vat-g5y]` carries the id but has no title: Bullet::parse rejects it.
+        // The user must see a parse error, not a misleading "unknown id".
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_backlog(&backlog, &format!("{HEADER}- [vat-g5y]\n"));
+        let cfg = write_user_config(&dir, "alice");
+
+        let err = run_impl("vat-g5y", &backlog, &cfg).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("could not be parsed"),
+            "expected parse error, got: {msg}"
+        );
+        assert!(
+            !msg.contains("unknown id"),
+            "must not report unknown id for a present-but-malformed bullet: {msg}"
+        );
+    }
+
+    // @spec CMD-CC-004
+    #[test]
+    fn start_does_not_write_file_when_bullet_is_malformed() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        let original = format!("{HEADER}- [vat-g5y]\n");
+        write_backlog(&backlog, &original);
+        let cfg = write_user_config(&dir, "alice");
+
+        let _ = run_impl("vat-g5y", &backlog, &cfg);
+        assert_eq!(read_backlog(&backlog), original);
+    }
+
+    // -----------------------------------------------------------------------
     // CMD-START-002 — refuse on partial or full claim
     // -----------------------------------------------------------------------
 
@@ -278,10 +389,7 @@ mod tests {
     fn start_aborts_when_by_marker_present_and_names_claimer() {
         let dir = TempDir::new().unwrap();
         let backlog = make_backlog_dir(&dir);
-        write_backlog(
-            &backlog,
-            &format!("{HEADER}- [vat-g5y] [by:bob] A task\n"),
-        );
+        write_backlog(&backlog, &format!("{HEADER}- [vat-g5y] [by:bob] A task\n"));
         let cfg = write_user_config(&dir, "alice");
 
         let err = run_impl("vat-g5y", &backlog, &cfg).unwrap_err();
@@ -336,13 +444,27 @@ mod tests {
         write_backlog(&backlog, &format!("{HEADER}- [vat-g5y] A task\n"));
         let cfg = write_user_config(&dir, "alice");
 
-        run_impl("vat-g5y", &backlog, &cfg).unwrap();
+        let msg = run_impl("vat-g5y", &backlog, &cfg).unwrap();
+        assert_eq!(msg, "started vat-g5y");
 
         let content = read_backlog(&backlog);
         assert!(
             content.contains("- [vat-g5y] [in-progress] [by:alice] A task\n"),
             "expected canonical marker order in: {content}"
         );
+    }
+
+    // @spec CMD-START-004
+    #[test]
+    fn start_returns_confirmation_message_naming_the_claimed_id() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_backlog(&backlog, &format!("{HEADER}- [vat-g5y] A task\n"));
+        let cfg = write_user_config(&dir, "alice");
+
+        // Uppercase input is normalised in the confirmation message.
+        let msg = run_impl("VAT-G5Y", &backlog, &cfg).unwrap();
+        assert_eq!(msg, "started vat-g5y");
     }
 
     // @spec CMD-START-003
@@ -410,9 +532,7 @@ mod tests {
         let content = read_backlog(&backlog);
         // Canonical: [id] [in-progress] [by:...] [blocked-by:...]
         assert!(
-            content.contains(
-                "- [vat-g5y] [in-progress] [by:alice] [blocked-by:vat-f1w] A task\n"
-            ),
+            content.contains("- [vat-g5y] [in-progress] [by:alice] [blocked-by:vat-f1w] A task\n"),
             "{content}"
         );
     }
