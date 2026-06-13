@@ -54,7 +54,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Empty and malformed bullets
 
-- [ ] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction. *(Detection exists — `Bullet::parse` returns `EmptyTitle` — but `vat sync` is not yet wired onto it: no warning is printed and a title-less bullet still receives an ID. Remaining work lands with the sync integration, vat-v3k.)*
+- [x] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, leave any note lines following it in place, and skip it for ID assignment and notes extraction.
 
 ## Item files
 

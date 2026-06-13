@@ -1,15 +1,18 @@
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
-// @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
+// @spec SYNC-PRE-001, SYNC-PRE-002
+// @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
+// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003
+// @spec FMT-PARSE-006
 
-use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
 use thiserror::Error;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, UnsupportedVersion, check_version};
-use crate::{base32, file_io, id_assignment, item_file, project_config, tombstone};
+use crate::bullet::{Bullet, BulletError};
+use crate::{file_io, id_assignment, item_file, project_config, tombstone};
 
 #[derive(Debug, Error)]
 pub(crate) enum SyncError {
@@ -54,16 +57,27 @@ struct PendingWrite {
     stripped: String,
 }
 
-/// Run the ID-assignment and notes-extraction steps of `vat sync`.
+/// Run the marker-normalization, ID-assignment, and notes-extraction steps of
+/// `vat sync`.
+///
+/// Every bullet is parsed with [`Bullet::parse`] (the shared front-loaded
+/// marker tokenizer) and re-emitted via [`Bullet::serialize`], which puts
+/// markers in canonical order with single-space separators (SYNC-MARK-001),
+/// reorders/respaces without changing marker values — ID lowercasing is
+/// canonicalization (SYNC-MARK-002) — and preserves dangling
+/// `[blocked-by:...]` markers (SYNC-MARK-003). A title-less bullet is
+/// malformed: a warning is printed and the line plus its note lines pass
+/// through verbatim, skipped for ID assignment and notes extraction
+/// (FMT-PARSE-006).
 ///
 /// ID assignment (delegated to [`id_assignment::assign_ids`]):
-/// - Every non-empty bullet without an `[id]` marker gets a fresh
-///   `<prefix>-<3 base32 chars>` ID inserted at the front of the bullet
+/// - Every well-formed bullet without an `[id]` marker gets a fresh
+///   `<prefix>-<3 base32 chars>` ID emitted at the front of the bullet
 ///   (SYNC-ID-001..003, 005, 006).
 /// - Newly-assigned IDs are appended to `backlog/.used-ids` only after
 ///   `backlog.md` has been written successfully (SYNC-ID-004).
 ///
-/// For each task entry that has note lines:
+/// For each well-formed task entry that has note lines:
 /// - Strips indentation (SYNC-NOTES-004) and trims blank edges.
 /// - If the stripped result is non-empty and an item file for the entry's ID
 ///   does not exist, creates it (SYNC-NOTES-002).
@@ -72,13 +86,30 @@ struct PendingWrite {
 /// - In all cases clears the notes from the entry in `backlog.md`
 ///   (SYNC-NOTES-001, SYNC-NOTES-005).
 ///
-/// Skips the `backlog.md` write when the output is byte-identical to the input
-/// (SYNC-WRITE-002), reporting that via the returned [`SyncOutcome`]. Creates
-/// `backlog/items/` on demand via `item_file::write_new_stripped` (SYNC-WRITE-004).
+/// Writes are all-or-nothing: parsing and ID generation finish before any
+/// file is touched (SYNC-WRITE-003), and a second run on canonical output is
+/// byte-identical (SYNC-WRITE-001). Skips the `backlog.md` write when the
+/// output is byte-identical to the input (SYNC-WRITE-002), reporting that via
+/// the returned [`SyncOutcome`]. Creates `backlog/items/` on demand via
+/// `item_file::write_new_stripped` (SYNC-WRITE-004).
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
-// @spec SYNC-PRE-001, SYNC-PRE-002, SYNC-WRITE-002, SYNC-WRITE-004
+// @spec SYNC-PRE-001, SYNC-PRE-002
+// @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
+// @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003
+// @spec FMT-PARSE-006
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
+    let mut warnings = Vec::new();
+    let result = run_impl(backlog_dir, &mut warnings);
+    for warning in &warnings {
+        eprintln!("{warning}");
+    }
+    result
+}
+
+/// [`run`] with warnings collected into `warnings` instead of printed, so
+/// tests can assert on warning content without capturing stderr.
+fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcome, SyncError> {
     let backlog_path = backlog_dir.join("backlog.md");
     let items_dir = backlog_dir.join("items");
     let used_ids_path = backlog_dir.join(".used-ids");
@@ -100,22 +131,36 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
 
     let mut region = ParsedRegion::parse(bf.parsed());
 
-    // One ID slot per assignable entry. Empty bullets (`- ` with no body) are
-    // skipped per the LLD's edge behavior: no ID is assigned and the line is
-    // preserved in place. Existing IDs are lowercased here: tombstones are
-    // lowercase-normalized on read, and the prefix comparison in
-    // `assign_ids` (SYNC-ID-005) is against the lowercase `project.id`.
-    // Slots with existing IDs are never written back to the bullet line, so
-    // the normalization does not rewrite the user's casing.
+    // FMT-PARSE-006: parse each bullet with the shared marker tokenizer. A
+    // title-less bullet is malformed — warn, preserve the line (and its note
+    // lines) verbatim, and exclude it from every later step. Malformed bullets
+    // are fully inert: an ID-shaped token on one does not seed the collision
+    // set and does not count for duplicate detection (LLD "Decisions").
+    let mut parsed: Vec<Option<Bullet>> = Vec::with_capacity(region.entries.len());
+    for entry in &region.entries {
+        match Bullet::parse(entry.bullet_line) {
+            Ok(bullet) => parsed.push(Some(bullet)),
+            Err(BulletError::EmptyTitle) => {
+                warnings.push(format!(
+                    "warning: bullet has no title, skipping: {:?}",
+                    entry.bullet_line.trim_end()
+                ));
+                parsed.push(None);
+            }
+        }
+    }
+
+    // One ID slot per well-formed bullet. `Bullet::parse` already lowercases
+    // IDs (FMT-MARK-001): tombstones are lowercase-normalized on read, and the
+    // prefix comparison in `assign_ids` (SYNC-ID-005) is against the lowercase
+    // `project.id`.
     let mut slots: Vec<Option<String>> = Vec::new();
     let mut slot_entry: Vec<usize> = Vec::new();
-    for (i, entry) in region.entries.iter().enumerate() {
-        let body = entry.bullet_line.strip_prefix("- ").unwrap_or("");
-        if body.trim().is_empty() {
-            continue;
+    for (i, bullet) in parsed.iter().enumerate() {
+        if let Some(bullet) = bullet {
+            slots.push(bullet.id.clone());
+            slot_entry.push(i);
         }
-        slots.push(extract_id(entry.bullet_line).map(str::to_ascii_lowercase));
-        slot_entry.push(i);
     }
 
     // SYNC-ID-002: collision avoidance against tombstones ∪ IDs already
@@ -125,30 +170,22 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
         used.insert(id.clone());
     }
 
-    let needs_id: Vec<usize> = slots
-        .iter()
-        .enumerate()
-        .filter_map(|(i, slot)| slot.is_none().then_some(i))
-        .collect();
-
-    let (new_ids, warnings) = id_assignment::assign_ids(
+    let (new_ids, id_warnings) = id_assignment::assign_ids(
         &mut slots,
         &mut used,
         config.project_id(),
         &mut rand::thread_rng(),
     )?;
-    for warning in &warnings {
-        eprintln!("{warning}");
-    }
+    warnings.extend(id_warnings);
 
-    // Entry index → newly-assigned ID, for splicing the marker into the
-    // bullet line on serialize. `assign_ids` fills the `None` slots in entry
-    // order, so `needs_id` (the pre-call `None` positions) zips with `new_ids`.
-    let inserted: HashMap<usize, &str> = needs_id
-        .iter()
-        .zip(&new_ids)
-        .map(|(&slot_idx, id)| (slot_entry[slot_idx], id.as_str()))
-        .collect();
+    // `assign_ids` filled every `None` slot; copy the slots back so each
+    // well-formed bullet now carries its ID (SYNC-ID-001: serialize emits the
+    // `[id]` marker first, before any other markers).
+    for (slot, &entry_idx) in slots.iter().zip(&slot_entry) {
+        if let Some(bullet) = &mut parsed[entry_idx] {
+            bullet.id.clone_from(slot);
+        }
+    }
 
     // Collect all item-file writes before touching any file.  A scan-phase
     // error (e.g. disk full) therefore leaves disk state unchanged: no item
@@ -161,22 +198,22 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let mut pending: Vec<PendingWrite> = Vec::new();
 
     for (i, entry) in region.entries.iter_mut().enumerate() {
-        let notes: String = entry.notes.to_owned();
-        // A bullet that just received an ID extracts its notes to that ID's
-        // item file (LLD step 5: assignment happens before extraction).
-        let id: Option<String> = inserted
-            .get(&i)
-            .map(|id| (*id).to_owned())
-            .or_else(|| extract_id(entry.bullet_line).map(str::to_owned));
+        // FMT-PARSE-006: a malformed bullet keeps its note lines in place —
+        // clearing them without an item file to receive them would silently
+        // destroy the notes.
+        let Some(bullet) = &parsed[i] else { continue };
 
-        if !notes.is_empty() {
-            let stripped = item_file::strip_notes(&notes);
+        if !entry.notes.is_empty() {
+            let stripped = item_file::strip_notes(entry.notes);
+            // Every well-formed bullet has an ID after `assign_ids`; a bullet
+            // that just received one extracts its notes to that ID's item file
+            // (LLD step 5: assignment happens before extraction).
             if !stripped.is_empty()
-                && let Some(id) = id
+                && let Some(id) = &bullet.id
             {
                 pending.push(PendingWrite {
                     item_path: items_dir.join(format!("{id}.md")),
-                    id,
+                    id: id.clone(),
                     stripped,
                 });
             }
@@ -186,18 +223,17 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
         entry.notes = "";
     }
 
-    // Serialize, splicing each newly-assigned ID marker in at the front of
-    // its bullet (SYNC-ID-001: `[id]` comes before any other markers).
-    let mut new_parsed = String::with_capacity(bf.parsed().len() + 8 * inserted.len());
+    // Serialize. Well-formed bullets are re-emitted in canonical form —
+    // markers in canonical order with single-space separators (SYNC-MARK-001),
+    // values untouched apart from ID lowercasing (SYNC-MARK-002), dangling
+    // [blocked-by:...] preserved (SYNC-MARK-003). Malformed bullets and their
+    // notes pass through verbatim (FMT-PARSE-006).
+    let mut new_parsed = String::with_capacity(bf.parsed().len() + 8 * new_ids.len());
     new_parsed.push_str(region.preamble);
     for (i, entry) in region.entries.iter().enumerate() {
-        if let Some(id) = inserted.get(&i) {
-            new_parsed.push_str("- [");
-            new_parsed.push_str(id);
-            new_parsed.push_str("] ");
-            new_parsed.push_str(&entry.bullet_line[2..]);
-        } else {
-            new_parsed.push_str(entry.bullet_line);
+        match &parsed[i] {
+            Some(bullet) => new_parsed.push_str(&bullet.serialize()),
+            None => new_parsed.push_str(entry.bullet_line),
         }
         new_parsed.push_str(entry.notes);
     }
@@ -242,37 +278,12 @@ pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     Ok(SyncOutcome::Wrote)
 }
 
-/// Scan all `[…]` bracket tokens in a bullet line and return the first whose
-/// content matches the Crockford base32 `<3-char>-<3-char>` ID format.
-///
-/// Bullets carry multiple marker tokens (`[in-progress]`, `[blocked-by:…]`,
-/// etc.); only a token whose two dash-separated segments are both valid 3-char
-/// Crockford base32 strings is treated as an ID marker.  The scan can find a
-/// valid ID at any position in the line; if multiple ID-shaped tokens appear
-/// (e.g. `[vat-t1h] [vat-g5y] Title`), the first one wins.
-fn extract_id(bullet_line: &str) -> Option<&str> {
-    let mut s = bullet_line.strip_prefix("- ")?;
-    loop {
-        let open = s.find('[')?;
-        s = &s[open + 1..];
-        let close = s.find(']')?;
-        let candidate = &s[..close];
-        s = &s[close + 1..];
-        if let Some((prefix, suffix)) = candidate.split_once('-')
-            && base32::validate(prefix, 3).is_ok()
-            && base32::validate(suffix, 3).is_ok()
-        {
-            return Some(candidate);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    use super::{SyncError, SyncOutcome, extract_id, run};
+    use super::{SyncError, SyncOutcome, run};
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -292,51 +303,6 @@ mod tests {
 
     fn read_backlog(dir: &TempDir) -> String {
         fs::read_to_string(dir.path().join("backlog.md")).expect("read backlog.md")
-    }
-
-    // ── extract_id ────────────────────────────────────────────────────────────
-
-    #[test]
-    fn extract_id_finds_first_valid_id_marker() {
-        assert_eq!(
-            extract_id("- [vat-t1h] [agent-ready] Title"),
-            Some("vat-t1h")
-        );
-    }
-
-    #[test]
-    fn extract_id_skips_non_id_markers_and_finds_id() {
-        // [in-progress] is not an ID; [vat-t1h] is.
-        assert_eq!(
-            extract_id("- [in-progress] [vat-t1h] Title"),
-            Some("vat-t1h")
-        );
-    }
-
-    #[test]
-    fn extract_id_returns_none_when_no_id_marker() {
-        assert_eq!(extract_id("- [agent-ready] Title without id"), None);
-    }
-
-    #[test]
-    fn extract_id_returns_none_for_bare_title() {
-        assert_eq!(extract_id("- Just a plain title"), None);
-    }
-
-    #[test]
-    fn extract_id_does_not_match_blocked_by_marker() {
-        // [blocked-by:vat-f1w] contains a dash but does not split into two 3-char base32 parts.
-        assert_eq!(extract_id("- [blocked-by:vat-f1w] Title"), None);
-    }
-
-    #[test]
-    fn extract_id_does_not_match_in_progress() {
-        assert_eq!(extract_id("- [in-progress] Title"), None);
-    }
-
-    #[test]
-    fn extract_id_returns_none_for_empty_bullet() {
-        assert_eq!(extract_id("- "), None);
     }
 
     // ── SYNC-PRE-001 ─────────────────────────────────────────────────────────
@@ -654,7 +620,7 @@ mod tests {
         assert!(!dir.path().join(".used-ids").exists());
     }
 
-    // @spec SYNC-ID-006
+    // @spec SYNC-ID-006, SYNC-WRITE-003
     #[test]
     fn run_aborts_on_duplicate_ids_without_writing_anything() {
         let dir = setup();
@@ -776,5 +742,199 @@ mod tests {
         write_backlog(&dir, content);
         run(dir.path()).unwrap();
         assert_eq!(read_backlog(&dir), content);
+    }
+
+    // ── Marker normalization (SYNC-MARK-001..003) ─────────────────────────────
+
+    // @spec SYNC-MARK-001
+    #[test]
+    fn run_reorders_markers_to_canonical_order() {
+        let dir = setup();
+        write_backlog(
+            &dir,
+            "- [blocked-by:vat-f1w] [by:jared] [in-progress] [vat-t1h] Title\n",
+        );
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] [in-progress] [by:jared] [blocked-by:vat-f1w] Title\n"
+        );
+    }
+
+    // @spec SYNC-MARK-001
+    #[test]
+    fn run_respaces_markers_to_single_spaces() {
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h]  [in-progress]\t Title\n");
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), "- [vat-t1h] [in-progress] Title\n");
+    }
+
+    // @spec SYNC-MARK-002
+    #[test]
+    fn run_preserves_marker_values_while_reordering() {
+        let dir = setup();
+        write_backlog(
+            &dir,
+            "- [by:john.doe_2-dev] [vat-t1h] [blocked-by:vat-h8x] Title\n",
+        );
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] [by:john.doe_2-dev] [blocked-by:vat-h8x] Title\n"
+        );
+    }
+
+    // @spec SYNC-MARK-002
+    #[test]
+    fn run_lowercases_id_values_as_canonicalization() {
+        let dir = setup();
+        write_backlog(&dir, "- [VAT-T1H] [blocked-by:VAT-F1W] Title\n");
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] [blocked-by:vat-f1w] Title\n"
+        );
+    }
+
+    // @spec SYNC-MARK-003
+    #[test]
+    fn run_keeps_dangling_blocked_by_marker() {
+        let dir = setup();
+        // vat-zzz appears nowhere else in the parsed region.
+        let content = "- [vat-t1h] [blocked-by:vat-zzz] Title\n";
+        write_backlog(&dir, content);
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), content);
+    }
+
+    // ── Bullet identity follows the front-loaded parser (FMT-MARK-006) ────────
+
+    // @spec SYNC-ID-001
+    #[test]
+    fn run_assigns_fresh_id_when_id_token_hides_behind_unknown_marker() {
+        let dir = setup();
+        // [TODO] is unknown, so [vat-xxx] is title text, not the bullet's ID:
+        // the bullet has no ID and gets a fresh one front-loaded.
+        write_backlog(&dir, "- [TODO] [vat-xxx] title\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let line = out.lines().next().unwrap();
+        assert!(
+            line.starts_with("- [vat-"),
+            "fresh id front-loaded: {line:?}"
+        );
+        assert!(
+            line.ends_with("] [TODO] [vat-xxx] title"),
+            "title text (incl. the old token) preserved verbatim: {line:?}"
+        );
+    }
+
+    // ── FMT-PARSE-006: title-less bullets warn and are skipped ────────────────
+
+    // @spec FMT-PARSE-006
+    #[test]
+    fn run_warns_and_preserves_marker_only_bullet() {
+        let dir = setup();
+        let content = "- [vat-g5y]\n";
+        write_backlog(&dir, content);
+        let mut warnings = Vec::new();
+        let outcome = super::run_impl(dir.path(), &mut warnings).unwrap();
+        assert_eq!(outcome, SyncOutcome::Skipped, "nothing else to change");
+        assert_eq!(read_backlog(&dir), content, "line preserved verbatim");
+        assert_eq!(warnings.len(), 1, "exactly one warning: {warnings:?}");
+        assert!(
+            warnings[0].contains("no title") && warnings[0].contains("[vat-g5y]"),
+            "warning names the problem and the line: {warnings:?}"
+        );
+    }
+
+    // @spec FMT-PARSE-006
+    #[test]
+    fn run_does_not_extract_notes_of_title_less_bullet() {
+        let dir = setup();
+        let content = "- [vat-g5y]\n  orphaned note\n";
+        write_backlog(&dir, content);
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            content,
+            "bullet line AND its notes preserved in place"
+        );
+        assert!(
+            !dir.path().join("items").exists(),
+            "no item file for a skipped bullet"
+        );
+    }
+
+    // @spec FMT-PARSE-006
+    #[test]
+    fn run_skips_title_less_bullet_for_id_assignment() {
+        let dir = setup();
+        write_backlog(&dir, "- \n");
+        let mut warnings = Vec::new();
+        super::run_impl(dir.path(), &mut warnings).unwrap();
+        assert_eq!(read_backlog(&dir), "- \n");
+        assert!(!dir.path().join(".used-ids").exists(), "no id assigned");
+        assert_eq!(warnings.len(), 1, "warned: {warnings:?}");
+    }
+
+    // @spec FMT-PARSE-006
+    #[test]
+    fn run_processes_well_formed_bullets_around_a_skipped_one() {
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h] First\n- [vat-g5y]\n- New task\n");
+        run(dir.path()).unwrap();
+        let out = read_backlog(&dir);
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[0], "- [vat-t1h] First");
+        assert_eq!(lines[1], "- [vat-g5y]", "malformed line untouched");
+        assert!(
+            lines[2].starts_with("- [vat-") && lines[2].ends_with("] New task"),
+            "bullet after the skipped one still gets an id: {:?}",
+            lines[2]
+        );
+    }
+
+    // @spec FMT-PARSE-006
+    #[test]
+    fn run_title_less_bullet_id_token_is_inert_for_duplicate_detection() {
+        let dir = setup();
+        // A well-formed bullet and a malformed one carry the same id token;
+        // the malformed bullet is inert, so this is NOT a duplicate-id error.
+        let content = "- [vat-abc] Real task\n- [vat-abc]\n";
+        write_backlog(&dir, content);
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Skipped);
+        assert_eq!(read_backlog(&dir), content);
+    }
+
+    // ── SYNC-WRITE-001: idempotence incl. marker normalization ───────────────
+
+    // @spec SYNC-WRITE-001
+    #[test]
+    fn run_twice_is_byte_identical_and_second_run_skips() {
+        let dir = setup();
+        write_backlog(
+            &dir,
+            "- [in-progress]  [vat-t1h] Messy\n  a note\n- No id yet\n",
+        );
+        let first = run(dir.path()).unwrap();
+        assert_eq!(first, SyncOutcome::Wrote);
+        let after_first = read_backlog(&dir);
+        let second = run(dir.path()).unwrap();
+        assert_eq!(second, SyncOutcome::Skipped, "second run is a no-op");
+        assert_eq!(read_backlog(&dir), after_first);
+    }
+
+    // @spec SYNC-WRITE-001
+    #[test]
+    fn run_normalizes_missing_trailing_newline() {
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h] Title");
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Wrote);
+        assert_eq!(read_backlog(&dir), "- [vat-t1h] Title\n");
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Skipped);
     }
 }

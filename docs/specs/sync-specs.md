@@ -15,9 +15,9 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Marker normalization
 
-- [ ] **SYNC-MARK-001** — When `vat sync` writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
-- [ ] **SYNC-MARK-002** — `vat sync` shall not modify the value of `[in-progress]`, `[by:...]`, or `[blocked-by:...]` markers; it only reorders and respaces them.
-- [ ] **SYNC-MARK-003** — `vat sync` shall not strip dangling `[blocked-by:<id>]` markers whose target ID is not present in the parsed region.
+- [x] **SYNC-MARK-001** — When `vat sync` writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
+- [x] **SYNC-MARK-002** — `vat sync` shall not modify the value of `[in-progress]`, `[by:...]`, or `[blocked-by:...]` markers; it only reorders and respaces them. Lowercasing of ID values in `[id]` and `[blocked-by:...]` markers (FMT-MARK-001, FMT-MARK-003 — everything VAT writes is lowercase) is canonicalization, not a value modification.
+- [x] **SYNC-MARK-003** — `vat sync` shall not strip dangling `[blocked-by:<id>]` markers whose target ID is not present in the parsed region.
 
 ## Notes extraction
 
@@ -35,9 +35,9 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Idempotence and writes
 
-- [ ] **SYNC-WRITE-001** — `vat sync` shall produce byte-identical output when run twice in succession on a file that already has all bullets ID'd, no notes, and canonical marker order.
+- [x] **SYNC-WRITE-001** — `vat sync` shall produce byte-identical output when run twice in succession on a file that already has all bullets ID'd, no notes, and canonical marker order.
 - [x] **SYNC-WRITE-002** — When the serialized output of `vat sync` is byte-identical to the input file, the system shall skip the write to `backlog.md`.
-- [ ] **SYNC-WRITE-003** — When `vat sync` aborts due to any error during parsing or ID generation, the system shall not write to any file.
+- [x] **SYNC-WRITE-003** — When `vat sync` aborts due to any error during parsing or ID generation, the system shall not write to any file.
 - [x] **SYNC-WRITE-004** — When `vat sync` runs and `backlog/items/` does not exist but a write is needed, the system shall create it.
 
 ## Preconditions

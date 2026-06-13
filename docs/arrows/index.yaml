@@ -13,26 +13,26 @@ taxonomy:
 # The graph of segments.
 arrows:
   backlog-format:
-    status: PARTIAL
+    status: COMPLETE
     sampled: 2026-06-09
     audited: 2026-06-12
-    audited_sha: 9dbd445
+    audited_sha: 03b355d
     blocks: [sync, commands]
     blockedBy: []
     detail: backlog-format.md
-    next: "Implement marker parsing (FMT-MARK-001 to 007) and wire FMT-WS-002 serializer"
+    next: null
     drift: null
 
   sync:
     status: PARTIAL
     sampled: 2026-06-09
     audited: 2026-06-12
-    audited_sha: 9dbd445
+    audited_sha: 03b355d
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
-    next: "Marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format (ID assignment landed via vat-s9g, PR #20)"
-    drift: "src/sync.rs carries a @spec SYNC-WRITE-001 test annotation but the spec marker is still [ ] — full idempotence pending ID assignment + marker normalization"
+    next: "Implement item-file pointer suffixes (SYNC-PTR-001 to 003) — the segment's last active gap (marker normalization + write guarantees landed via vat-v3k)"
+    drift: null
 
   commands:
     status: PARTIAL
