@@ -1,0 +1,4 @@
+# Golden-test fixtures are compared byte-for-byte against `vat sync` output.
+# Disable line-ending normalization and trailing-whitespace fixing so a
+# checkout/commit on any platform can never silently mutate a fixture.
+* -text -whitespace
