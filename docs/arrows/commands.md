@@ -4,7 +4,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-11 (git SHA `017ee5f`). Config commands (CMD-CFG-001 to 006) and `vat init` (CMD-INIT-001 to 007) fully implemented with tests. Start, block, unblock, and done are stubs blocked on FMT-MARK-* from `backlog-format`.
+**PARTIAL** — last audited 2026-06-12 (git SHA `9dbd445`). Config commands (CMD-CFG-001 to 006) and `vat init` (CMD-INIT-001 to 007) fully implemented with tests. Exit-code framework (CMD-EXIT-001 to 003) implemented and tested, but wired only through `cmd_config` — partial coverage (see Key Finding #5). Start, block, unblock, and done are stubs blocked on FMT-MARK-* from `backlog-format`.
 
 ## References
 
@@ -15,7 +15,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 - docs/llds/commands.md
 
 ### EARS
-- docs/specs/commands-specs.md (35 active specs: 14 implemented, 21 gaps; 4 deferred)
+- docs/specs/commands-specs.md (35 active specs: 17 marked `[x]`, 18 open; 4 deferred — see Spec Coverage for reality-adjusted counts)
 
 ### Tests
 - src/cmd_config.rs (inline `#[cfg(test)]`)
@@ -23,10 +23,11 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 - src/readme_template.rs (inline `#[cfg(test)]`)
 
 ### Code
-- src/main.rs — clap command dispatch; `cmd_init` dispatcher; stubs for start/block/unblock/done
+- src/main.rs — clap command dispatch; `cmd_init` dispatcher; stubs for start/block/unblock/done; `classify_exit_code()` (CMD-EXIT-001 to 003)
 - src/cmd_config.rs — `vat config get` and `vat config set` (CMD-CFG-001 to 006)
 - src/cmd_init.rs — `vat init` full implementation (CMD-INIT-001 to 007, FMT-FM-005)
 - src/readme_template.rs — baked-in `backlog/README.md` template (CMD-INIT-006)
+- src/errors.rs — `UserError`: typed wrapper for user-facing errors; exit-code classification anchor (CMD-EXIT-002)
 
 ## Architecture
 
@@ -49,10 +50,10 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 | `vat unblock` | CMD-UNBLOCK-001 to 002 | 0 | 0 | 2 |
 | `vat done` | CMD-DONE-001 to 005 | 0 | 0 | 5 |
 | `vat config` | CMD-CFG-001 to 006 | 6 | 0 | 0 |
-| Exit codes | CMD-EXIT-001 to 003 | 0 | 0 | 3 |
+| Exit codes | CMD-EXIT-001 to 003 | 2 | 0 | 1 |
 | Deferred | CMD-LOCK-001, CMD-FORCE-001, CMD-DRYRUN-001, CMD-INIT-ADOPT-001 | 0 | 4 | 0 |
 
-**Summary:** 14 of 35 active specs implemented (CMD-CC-001, CMD-INIT-001 to 007, CMD-CFG-001 to 006); 4 deferred; 21 gaps.
+**Summary:** 16 of 35 active specs implemented (CMD-CC-001, CMD-INIT-001 to 007, CMD-CFG-001 to 006, CMD-EXIT-001 and 002); 4 deferred; 19 gaps. Note: `commands-specs.md` marks CMD-EXIT-003 `[x]`, but it is counted as a gap here because `cmd_init` and `cmd_sync` exit 1 for internal errors (see Key Finding #5 and the `commands` drift entry in `index.yaml`).
 
 ## Key Findings
 
@@ -64,7 +65,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 4. **start/block/unblock/done are stubs** — `src/main.rs:135–153` shows each as "not yet implemented". Start, block, unblock, and done all need the `find_entry` shared helper and marker manipulation, which in turn need FMT-MARK-* from `backlog-format`.
 
-5. **CMD-EXIT-001 to 003 unformalized** — Exit codes 0 and 1 are used in practice (cmd_config and main.rs) but code 2 (internal error) has no `@spec CMD-EXIT-003` annotation anywhere and is never emitted.
+5. **Exit-code framework (CMD-EXIT-001 to 003) implemented for cmd_config** — `classify_exit_code()` at `src/main.rs:183` chain-searches the anyhow error for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. 17 unit tests in `src/main.rs`; all three exit codes are `@spec`-annotated. **Partial coverage:** `classify_exit_code` is currently wired only through `cmd_config_get` and `cmd_config_set` — `cmd_init` and `cmd_sync` still exit 1 for all errors.
 
 ## Work Required
 
@@ -73,5 +74,5 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 2. Implement `start`, `block`, `unblock`, `done` using `find_entry` once it exists.
 
 ### Should Fix
-4. Add `@spec CMD-EXIT-003` and emit exit code 2 on internal errors (currently all errors exit 1).
-5. Implement CMD-CC-002 (unknown-id error path) and CMD-CC-003 (canonical marker emit) as part of `find_entry`.
+3. Thread `classify_exit_code` through `cmd_init` and `cmd_sync` so CMD-EXIT-003 applies to every command, not just cmd_config operations.
+4. Implement CMD-CC-002 (unknown-id error path) and CMD-CC-003 (canonical marker emit) as part of `find_entry`.
