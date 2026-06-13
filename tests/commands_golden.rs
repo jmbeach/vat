@@ -169,8 +169,14 @@ fn block_adds_blocked_by_marker() {
     let tmp = prepare("block");
 
     let out = vat(&tmp, &["block", "vat-g5y", "vat-f1w"]);
-    assert_outcome(&out, Outcome::Success);
+    let (stdout, _) = assert_outcome(&out, Outcome::Success);
 
+    // The confirmation goes to stdout and names both ids (parallels the start
+    // test): a binary that silently stopped confirming would otherwise pass.
+    assert!(
+        stdout.contains("vat-g5y") && stdout.contains("vat-f1w"),
+        "confirmation names target and blocker: {stdout}"
+    );
     assert!(
         read_backlog(&tmp).contains("- [vat-g5y] [blocked-by:vat-f1w] Target\n"),
         "blocker added in canonical position, got:\n{}",
@@ -203,6 +209,25 @@ fn block_unknown_blocker_is_refused_and_leaves_file_unchanged() {
     assert!(
         stderr.contains("unknown blocker: vat-zzz"),
         "unknown-blocker diagnostic: {stderr}"
+    );
+    assert_eq!(read_backlog(&tmp), before, "a refused block must not write");
+}
+
+// The symmetric partner to the unknown-blocker case: an unknown *target*
+// reports "unknown id" (the shared find_entry path, CMD-CC-002) rather than
+// "unknown blocker".
+// @spec CMD-CC-002
+#[test]
+fn block_unknown_target_is_refused_and_leaves_file_unchanged() {
+    let tmp = prepare("block");
+    let before = read_backlog(&tmp);
+
+    let out = vat(&tmp, &["block", "vat-zzz", "vat-f1w"]);
+    let (_, stderr) = assert_outcome(&out, Outcome::Refused);
+
+    assert!(
+        stderr.contains("unknown id: vat-zzz"),
+        "unknown-target diagnostic: {stderr}"
     );
     assert_eq!(read_backlog(&tmp), before, "a refused block must not write");
 }
@@ -262,7 +287,7 @@ fn unblock_strips_the_blocked_by_marker() {
         "marker stripped, title preserved, got:\n{after}"
     );
     assert!(
-        !after.contains("blocked-by"),
+        !after.contains("[blocked-by:"),
         "no blocker marker should remain, got:\n{after}"
     );
 }
@@ -309,7 +334,7 @@ fn done_removes_entry_deletes_item_tombstones_and_auto_unblocks() {
         "dependent auto-unblocked, got:\n{after}"
     );
     assert!(
-        !after.contains("blocked-by"),
+        !after.contains("[blocked-by:"),
         "no dangling blocker, got:\n{after}"
     );
     // CMD-DONE-002: the item file is deleted.
