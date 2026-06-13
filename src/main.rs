@@ -1,5 +1,6 @@
 mod backlog_file;
 mod base32;
+mod bullet;
 mod cmd_completions;
 mod cmd_config;
 mod cmd_init;
