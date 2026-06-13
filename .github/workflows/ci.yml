@@ -27,7 +27,11 @@ jobs:
             command: cargo build --all-targets --all-features --locked
             components: ""
           - task: test
-            command: cargo test --all-features --locked
+            # NOTE: nextest does not run doctests, but neither did `cargo test`
+            # here: doctests only run for library targets and this crate is
+            # bin-only (`cargo test --doc` errors with "no library targets").
+            # If a lib target is ever added, add a doctest task alongside this.
+            command: cargo nextest run --all-features --locked
             components: ""
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +42,12 @@ jobs:
           components: ${{ matrix.components }}
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        if: matrix.task == 'test'
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
+        with:
+          tool: nextest
 
       - name: ${{ matrix.task }}
         run: ${{ matrix.command }}
