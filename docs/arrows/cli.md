@@ -36,9 +36,9 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
-| Exit codes | CMD-EXIT-001 to 003 | 3 | 0 | 0 |
+| Exit codes | CMD-EXIT-001 to 003 | 2 | 0 | 1 |
 
-**Summary:** 3 of 3 exit-code specs implemented; 0 gaps; no deferred. All three exit codes are wired and `@spec`-annotated in `src/main.rs`.
+**Summary:** 2 of 3 exit-code specs implemented; 1 gap; no deferred. CMD-EXIT-001 and CMD-EXIT-002 hold for every command. CMD-EXIT-003 is marked `[x]` in `commands-specs.md` but holds only for `cmd_config` operations — `cmd_init` and `cmd_sync` exit 1 for internal errors too (see Key Finding #2 and the `commands` drift entry in `index.yaml`).
 
 *Note: CLI argument-parsing and error-rendering behaviors are specified only in LLD prose (`docs/llds/cli.md`), not as EARS requirements. No `docs/specs/cli-specs.md` exists.*
 
@@ -46,7 +46,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 1. **No dedicated EARS spec file** — `docs/llds/cli.md` has no matching `docs/specs/cli-specs.md`. Argument-parsing behavior (subcommand structure, ID positional args, clap conventions) and error-rendering behavior are documented only in LLD prose. Exit-code specs landed in `commands-specs.md` rather than a dedicated CLI spec. This is a gap in the intent chain.
 
-2. **Exit codes wired** — `classify_exit_code()` at `src/main.rs:183` classifies errors by chain-searching for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal/IO). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. All three exit codes are `@spec`-annotated and covered by 15 unit tests. Currently wired only through `cmd_config_get`/`cmd_config_set`; `cmd_init` and `cmd_sync` still exit 1 for all errors.
+2. **Exit codes wired** — `classify_exit_code()` at `src/main.rs:183` classifies errors by chain-searching for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal/IO). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. All three exit codes are `@spec`-annotated and covered by 17 unit tests. Currently wired only through `cmd_config_get`/`cmd_config_set`; `cmd_init` and `cmd_sync` still exit 1 for all errors.
 
 3. **Clap skeleton is complete** — All subcommands (`init`, `sync`, `start`, `block`, `unblock`, `done`, `config get`, `config set`) are wired with correct argument types. Help and version derive from clap defaults. The shell does not need changes to support new command implementations.
 
@@ -54,6 +54,4 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ### Should Fix
 1. Create `docs/specs/cli-specs.md` with EARS requirements for: argument parsing, error rendering format, output conventions, and the exit code table. Captures intent currently in LLD prose only.
-
-### Nice to Have
 2. Thread `classify_exit_code` through `cmd_init` and `cmd_sync` so CMD-EXIT-003 applies to every command, not just cmd_config operations.
