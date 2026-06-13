@@ -7,8 +7,8 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## Cross-cutting
 
 - [x] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
-- [ ] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
-- [ ] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
+- [x] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
+- [x] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
 
 ## `vat init`
 
@@ -22,9 +22,9 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat start <id>`
 
-- [ ] **CMD-START-001** — When `user.name` is unset in the user config, `vat start` shall abort with an error pointing the user at `vat config set user.name <name>`.
-- [ ] **CMD-START-002** — When the target bullet has either an `[in-progress]` marker or a `[by:...]` marker, `vat start` shall abort with an error indicating the existing claim.
-- [ ] **CMD-START-003** — On success, `vat start` shall add both `[in-progress]` and `[by:<user.name>]` markers to the target bullet.
+- [x] **CMD-START-001** — When `user.name` is unset in the user config, `vat start` shall abort with an error pointing the user at `vat config set user.name <name>`.
+- [x] **CMD-START-002** — When the target bullet has either an `[in-progress]` marker or a `[by:...]` marker, `vat start` shall abort with an error indicating the existing claim.
+- [x] **CMD-START-003** — On success, `vat start` shall add both `[in-progress]` and `[by:<user.name>]` markers to the target bullet.
 
 ## `vat block <id> <blocker-id>`
 

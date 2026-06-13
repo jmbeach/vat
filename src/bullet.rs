@@ -1,10 +1,5 @@
 // @spec FMT-MARK-001, FMT-MARK-002, FMT-MARK-003, FMT-MARK-004, FMT-MARK-005, FMT-MARK-006, FMT-MARK-007, FMT-PARSE-006, FMT-WS-002
 
-// TODO(vat-v3k): remove when sync.rs is wired onto Bullet::parse/serialize and
-// its bespoke extract_id is deleted. `expect` (not `allow`) so the compiler
-// flags the attribute as unfulfilled once the module is integrated.
-#![cfg_attr(not(test), expect(dead_code))]
-
 use crate::base32;
 use thiserror::Error;
 
