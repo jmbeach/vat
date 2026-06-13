@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — last audited 2026-06-12 (git SHA `9dbd445`). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit codes 0, 1, and 2 are now wired via `classify_exit_code()` in `src/main.rs` (for cmd_config operations).
+**MAPPED** — last audited 2026-06-12 (git SHA `9dbd445`); black-box CLI tests added 2026-06-13 (vat-g4w). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit codes 0, 1, and 2 are now wired via `classify_exit_code()` in `src/main.rs` (for cmd_config operations). The CLI shell is now covered end-to-end by `tests/e2e_lifecycle.rs`, which spawns the real binary through the documented `init` → `sync` → `start` → `done` lifecycle.
 
 ## References
 
@@ -18,7 +18,9 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 - docs/specs/commands-specs.md (CMD-EXIT-001 to 003 — exit code specs; no dedicated cli-specs.md)
 
 ### Tests
-- None for CLI shell itself (leaf-module error types are tested in their own modules)
+- tests/e2e_lifecycle.rs — black-box lifecycle tests (`init` → `sync` → `start` → `done`) spawning the real binary via `CARGO_BIN_EXE_vat`; assert stdout, exit codes (CMD-EXIT-001/002), and on-disk state with isolated `XDG_CONFIG_HOME`/`HOME` (vat-g4w)
+- tests/completions.rs — black-box `vat completions <shell>` exit-code/output tests
+- Leaf-module error types remain tested in their own modules
 
 ### Code
 - src/main.rs — `Cli`, `Commands`, `ConfigAction` enums; dispatch match; error printing; `classify_exit_code()` (CMD-EXIT-001 to 003)
