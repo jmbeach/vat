@@ -15,6 +15,8 @@ mod item_file;
 mod project_config;
 mod readme_template;
 mod sync;
+#[cfg(test)]
+mod test_support;
 mod tombstone;
 mod user_config;
 
@@ -23,6 +25,11 @@ use std::io::{self, Write as _};
 use clap::{Parser, Subcommand};
 
 use crate::cmd_completions::SupportedShell;
+
+/// The backlog directory, relative to the current working directory. Every
+/// bullet-reading/-mutating command resolves its files under it; a single
+/// constant means a rename touches one site, not one per command.
+const BACKLOG_DIR: &str = "backlog";
 
 #[derive(Parser)]
 #[command(
@@ -156,7 +163,7 @@ fn prompt_for_prefix() -> String {
 }
 
 fn cmd_sync() {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     if let Err(e) = sync::run(backlog_dir) {
         eprintln!("vat sync: {e}");
         std::process::exit(1);
@@ -165,7 +172,7 @@ fn cmd_sync() {
 
 // @spec CMD-START-001, CMD-START-002, CMD-START-003
 fn cmd_start(id: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_start::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
         Err(e) => {
@@ -177,7 +184,7 @@ fn cmd_start(id: &str) {
 
 // @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006
 fn cmd_block(id: &str, blocker_id: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_block::run(id, blocker_id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
         Err(e) => {
@@ -189,7 +196,7 @@ fn cmd_block(id: &str, blocker_id: &str) {
 
 // @spec CMD-UNBLOCK-001, CMD-UNBLOCK-002
 fn cmd_unblock(id: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_unblock::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
         Err(e) => {
@@ -201,7 +208,7 @@ fn cmd_unblock(id: &str) {
 
 // @spec CMD-DONE-001, CMD-DONE-002, CMD-DONE-003, CMD-DONE-004, CMD-DONE-005
 fn cmd_done(id: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_done::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
         Err(e) => {
@@ -213,7 +220,7 @@ fn cmd_done(id: &str) {
 
 // @spec CMD-CFG-001, CMD-CFG-002
 fn cmd_config_get(key: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_config::get(key, backlog_dir) {
         Ok(Some(value)) => println!("{value}"),
         Ok(None) => {}
@@ -226,7 +233,7 @@ fn cmd_config_get(key: &str) {
 
 // @spec CMD-CFG-003, CMD-CFG-004, CMD-CFG-005, CMD-CFG-006
 fn cmd_config_set(key: &str, value: &str) {
-    let backlog_dir = std::path::Path::new("backlog");
+    let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     if let Err(e) = cmd_config::set(key, value, backlog_dir) {
         eprintln!("error: {e:#}");
         std::process::exit(classify_exit_code(&e));
