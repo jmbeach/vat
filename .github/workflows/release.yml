@@ -1,0 +1,64 @@
+name: Release
+
+# Cut a release by pushing a version tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
+# This builds release binaries for the three supported targets and attaches a
+# `.tar.gz` per target to the GitHub Release for that tag.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# The release job needs to create the Release and upload assets.
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Build every target even if one fails, so a single broken target doesn't
+      # block publishing the others.
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package binary
+        shell: bash
+        run: |
+          asset="vat-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
+          tar -czf "$asset" -C "target/${{ matrix.target }}/release" vat
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
+
+      - name: Attach binary to the release
+        # Third-party action pinned to a release commit SHA per the supply-chain
+        # discipline applied to the CI workflow. Each matrix job uploads its own
+        # asset to the same tag's release (the action creates the release on the
+        # first upload and appends on the rest).
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          files: ${{ env.ASSET }}
+          fail_on_unmatched_files: true

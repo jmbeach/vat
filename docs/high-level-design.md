@@ -53,7 +53,7 @@ Every command is a one-shot read → mutate → write cycle on these files. Conc
 
 VAT has two first-class implementations of the same intent:
 
-- **The Rust binary** (`src/`) — the primary distribution.
+- **The Rust binary** (`src/`) — the primary distribution. Installed via `cargo install --git https://github.com/jmbeach/vat`; tagged releases (`v*`) also publish prebuilt binaries for macOS (arm64, x86_64) and x86_64 Linux through `.github/workflows/release.yml`.
 - **The `vat` skill** (`.claude/skills/vat/SKILL.md`) — a prose implementation an agent follows directly. A remote coding agent is handed the whole skill and operates a VAT backlog with zero install (no `cargo`, no binary), which the binary cannot offer. Its design lives in [the skill LLD](llds/skill.md).
 
 Both implementations target the same EARS specs. Where a spec is implemented by only one of them, its status reflects that.
