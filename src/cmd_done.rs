@@ -30,7 +30,8 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     // CMD-CC-002 / CMD-CC-004: locate the matching entry; abort without writes if
     // not found, or with the parse failure if the bullet is present but malformed.
     let target_idx = match find_entry_index(&region, &id_lower) {
-        EntryLookup::Found(idx) => idx,
+        // `done` removes the whole entry, so the parsed bullet is unused here.
+        EntryLookup::Found(idx, _) => idx,
         EntryLookup::Malformed(err) => {
             return Err(UserError(format!(
                 "{id} found but its bullet could not be parsed: {err}"

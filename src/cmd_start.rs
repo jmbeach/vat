@@ -40,8 +40,8 @@ fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resul
     // CMD-CC-002 / CMD-CC-004: locate the matching entry; abort without writes
     // if not found, or with the parse failure if the bullet is present but
     // malformed.
-    let entry_idx = match find_entry_index(&region, &id_lower) {
-        EntryLookup::Found(idx) => idx,
+    let (entry_idx, mut bullet) = match find_entry_index(&region, &id_lower) {
+        EntryLookup::Found(idx, bullet) => (idx, bullet),
         EntryLookup::Malformed(err) => {
             return Err(UserError(format!(
                 "{id} found but its bullet could not be parsed: {err}"
@@ -50,9 +50,6 @@ fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resul
         }
         EntryLookup::NotFound => return Err(UserError(format!("unknown id: {id}")).into()),
     };
-
-    let mut bullet = Bullet::parse(region.entries[entry_idx].bullet_line)
-        .expect("entry bullet must parse: find_entry_index only returns parsable entries");
 
     // CMD-START-002: refuse on partial-or-full claim.
     if bullet.in_progress || bullet.by.is_some() {
@@ -81,8 +78,10 @@ fn run_impl(id: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resul
 /// Outcome of scanning a region for a bullet carrying a given id.
 // @spec CMD-CC-002, CMD-CC-004
 pub(crate) enum EntryLookup {
-    /// A well-formed bullet carries the id; payload is its entry index.
-    Found(usize),
+    /// A well-formed bullet carries the id; payload is its entry index and the
+    /// already-parsed [`Bullet`], so callers reuse it rather than re-parsing the
+    /// winning line.
+    Found(usize, Bullet),
     /// A bullet line carries the id token but failed to parse.
     Malformed(BulletError),
     /// No bullet carries the id.
@@ -105,7 +104,7 @@ pub(crate) enum EntryLookup {
 pub(crate) fn find_entry_index(region: &ParsedRegion<'_>, id_lower: &str) -> EntryLookup {
     for (idx, e) in region.entries.iter().enumerate() {
         match Bullet::parse(e.bullet_line) {
-            Ok(b) if b.id.as_deref() == Some(id_lower) => return EntryLookup::Found(idx),
+            Ok(b) if b.id.as_deref() == Some(id_lower) => return EntryLookup::Found(idx, b),
             Err(err) if bullet_line_carries_id(e.bullet_line, id_lower) => {
                 return EntryLookup::Malformed(err);
             }
@@ -149,9 +148,9 @@ fn no_user_name_error() -> anyhow::Error {
 /// Serialize `region` with entry `entry_idx`'s bullet line replaced by `new_bullet_line`.
 /// Notes for every entry are preserved verbatim; the preamble is preserved verbatim.
 ///
-/// Shared by every single-bullet-mutating command (`start`, `block`, ...). vat-m2k
-/// will consolidate this single-bullet-replace helper into a common home; until then
-/// it lives here and is reused across commands rather than duplicated.
+/// Shared by every single-bullet-mutating command (`start`, `block`, `unblock`, ...).
+/// vat-m2k will consolidate this single-bullet-replace helper into a common home;
+/// until then it lives here and is reused across commands rather than duplicated.
 pub(crate) fn serialize_region_with_replaced_bullet(
     region: &ParsedRegion<'_>,
     entry_idx: usize,

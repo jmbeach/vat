@@ -5,7 +5,6 @@ use std::path::Path;
 use anyhow::Context;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, check_version};
-use crate::bullet::Bullet;
 use crate::cmd_start::{EntryLookup, find_entry_index, serialize_region_with_replaced_bullet};
 use crate::errors::UserError;
 use crate::file_io;
@@ -40,8 +39,8 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
 
     // CMD-CC-002 / CMD-CC-004: locate the target; abort without writes if not
     // found, or with the parse failure if the bullet is present but malformed.
-    let entry_idx = match find_entry_index(&region, &id_lower) {
-        EntryLookup::Found(idx) => idx,
+    let (entry_idx, mut bullet) = match find_entry_index(&region, &id_lower) {
+        EntryLookup::Found(idx, bullet) => (idx, bullet),
         EntryLookup::Malformed(err) => {
             return Err(UserError(format!(
                 "{id} found but its bullet could not be parsed: {err}"
@@ -60,7 +59,7 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
     // the target-id handling above (CMD-CC-004), so the user is not told a plainly
     // present id is "unknown".
     match find_entry_index(&region, &blocker_lower) {
-        EntryLookup::Found(_) => {}
+        EntryLookup::Found(..) => {}
         EntryLookup::Malformed(err) => {
             return Err(UserError(format!(
                 "blocker {blocker_id} found but its bullet could not be parsed: {err}"
@@ -71,9 +70,6 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
             return Err(UserError(format!("unknown blocker: {blocker_id}")).into());
         }
     }
-
-    let mut bullet = Bullet::parse(region.entries[entry_idx].bullet_line)
-        .expect("entry bullet must parse: find_entry_index only returns parsable entries");
 
     // Computed once and shared by both the no-op and the write path so the
     // message format can never drift between them.

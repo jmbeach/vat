@@ -40,8 +40,8 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat unblock <id>`
 
-- [ ] **CMD-UNBLOCK-001** — When the target bullet has no `[blocked-by:...]` marker, `vat unblock` shall succeed without modifying any file.
-- [ ] **CMD-UNBLOCK-002** — When the target bullet has a `[blocked-by:...]` marker, `vat unblock` shall remove that marker.
+- [x] **CMD-UNBLOCK-001** — When the target bullet has no `[blocked-by:...]` marker, `vat unblock` shall succeed without modifying any file.
+- [x] **CMD-UNBLOCK-002** — When the target bullet has a `[blocked-by:...]` marker, `vat unblock` shall remove that marker.
 
 ## `vat done <id>`
 
