@@ -87,7 +87,8 @@ Markers are always front-loaded in the order shown. `vat sync` normalizes order 
 
 - Marker brackets are matched greedily from the left of the bullet body. As soon as the parser encounters a token that doesn't match a known marker pattern, the rest of the line is the title.
 - Unknown `[...]` tokens at the front are treated as part of the title (so users can type `- [TODO] something` without VAT consuming the bracket).
-- Whitespace between markers is normalized to a single space on serialize.
+- A duplicate of a single-occurrence marker (`[id]`, `[in-progress]`, `[by:...]`) is treated like an unknown token: marker parsing stops and the duplicate starts the title, keeping hand-typed repetition visible. `[blocked-by:...]` is the deliberate exception — users plausibly list multiple blockers, so extras are consumed and discarded with only the first kept (FMT-MARK-007).
+- Whitespace between markers is normalized to a single space on serialize. Spaces and tabs both count as inter-marker whitespace on parse.
 - Empty bullets (`-` with no title) are a parse error; `vat sync` prints a warning, leaves the line untouched, and skips the entry.
 
 ### Notes

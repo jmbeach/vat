@@ -1,6 +1,9 @@
 // @spec FMT-MARK-001, FMT-MARK-002, FMT-MARK-003, FMT-MARK-004, FMT-MARK-005, FMT-MARK-006, FMT-MARK-007, FMT-PARSE-006, FMT-WS-002
 
-#![allow(dead_code)]
+// TODO(vat-v3k): remove when sync.rs is wired onto Bullet::parse/serialize and
+// its bespoke extract_id is deleted. `expect` (not `allow`) so the compiler
+// flags the attribute as unfulfilled once the module is integrated.
+#![cfg_attr(not(test), expect(dead_code))]
 
 use crate::base32;
 use thiserror::Error;
@@ -28,7 +31,12 @@ impl Bullet {
     // newline then matches markers left-to-right: as soon as a token does not
     // match any known pattern the rest becomes the title. FMT-MARK-007: a
     // second [blocked-by:...] is silently skipped (not treated as unknown)
-    // so parsing continues past it and only the first is kept.
+    // so parsing continues past it and only the first is kept. That is a
+    // deliberate exception: users plausibly list multiple blockers. Duplicates
+    // of the single-occurrence markers ([id], [in-progress], [by:...]) instead
+    // fall through to FMT-MARK-006 — marker parsing stops and the duplicate
+    // starts the title — so hand-typed repetition stays visible rather than
+    // being silently discarded.
     pub(crate) fn parse(bullet_line: &str) -> Result<Self, BulletError> {
         let body = bullet_line.strip_prefix("- ").unwrap_or(bullet_line);
         let body = body.trim_end_matches('\n').trim_end_matches('\r');
@@ -40,7 +48,9 @@ impl Bullet {
         let mut blocked_by: Option<String> = None;
 
         loop {
-            rest = rest.trim_start_matches(' ');
+            // Tabs count as inter-marker whitespace too; otherwise a tab
+            // would silently absorb every following marker into the title.
+            rest = rest.trim_start_matches([' ', '\t']);
 
             if !rest.starts_with('[') {
                 break;
@@ -84,8 +94,9 @@ impl Bullet {
             break;
         }
 
-        // FMT-WS-002: strip trailing whitespace from title
-        let title = rest.trim_end().to_string();
+        // LLD: the title is the rest of the line, trimmed (both ends —
+        // FMT-WS-002 covers the trailing side on serialize).
+        let title = rest.trim().to_string();
 
         if title.is_empty() {
             return Err(BulletError::EmptyTitle);
@@ -101,7 +112,24 @@ impl Bullet {
     }
 
     // @spec FMT-MARK-004, FMT-MARK-005, FMT-WS-002
+    //
+    // Invariant: fields are emitted verbatim, so `id` and `blocked_by` must
+    // hold valid `<3>-<3>` lowercase IDs (as produced by `parse`) or the
+    // output will not round-trip — re-parsing would demote the marker to
+    // title text per FMT-MARK-006. Callers constructing `Bullet` directly
+    // own that invariant; the debug_asserts catch violations in tests.
     pub(crate) fn serialize(&self) -> String {
+        debug_assert!(
+            self.id.as_deref().is_none_or(is_valid_id_inner),
+            "Bullet.id {:?} is not a valid <3>-<3> id",
+            self.id
+        );
+        debug_assert!(
+            self.blocked_by.as_deref().is_none_or(is_valid_id_inner),
+            "Bullet.blocked_by {:?} is not a valid <3>-<3> id",
+            self.blocked_by
+        );
+
         let mut tokens: Vec<String> = Vec::new();
         if let Some(id) = &self.id {
             tokens.push(format!("[{id}]"));
@@ -115,9 +143,23 @@ impl Bullet {
         if let Some(blocked_by) = &self.blocked_by {
             tokens.push(format!("[blocked-by:{blocked_by}]"));
         }
-        tokens.push(self.title.trim_end().to_string());
+        // FMT-WS-002: an empty title must not leave a trailing space behind
+        // the joined markers.
+        let title = self.title.trim_end();
+        if !title.is_empty() {
+            tokens.push(title.to_string());
+        }
         format!("- {}\n", tokens.join(" "))
     }
+}
+
+// FMT-MARK-001 / FMT-MARK-003: shared `<3-char-base32>-<3-char-base32>` shape
+// check (case-insensitive, per FMT-B32-002).
+fn is_valid_id_inner(inner: &str) -> bool {
+    inner.len() == 7
+        && inner.as_bytes()[3] == b'-'
+        && base32::validate(&inner[..3], 3).is_ok()
+        && base32::validate(&inner[4..], 3).is_ok()
 }
 
 // FMT-MARK-001
@@ -125,13 +167,9 @@ fn try_id(s: &str) -> Option<(String, &str)> {
     debug_assert!(s.starts_with('['));
     let close = s[1..].find(']')? + 1;
     let inner = &s[1..close];
-    if inner.len() != 7 || inner.as_bytes().get(3) != Some(&b'-') {
+    if !is_valid_id_inner(inner) {
         return None;
     }
-    let prefix = &inner[..3];
-    let suffix = &inner[4..];
-    base32::validate(prefix, 3).ok()?;
-    base32::validate(suffix, 3).ok()?;
     Some((inner.to_lowercase(), &s[close + 1..]))
 }
 
@@ -157,13 +195,9 @@ fn try_blocked_by(s: &str) -> Option<(String, &str)> {
     let after_prefix = s.strip_prefix("[blocked-by:")?;
     let close = after_prefix.find(']')?;
     let id_str = &after_prefix[..close];
-    if id_str.len() != 7 || id_str.as_bytes().get(3) != Some(&b'-') {
+    if !is_valid_id_inner(id_str) {
         return None;
     }
-    let prefix = &id_str[..3];
-    let suffix = &id_str[4..];
-    base32::validate(prefix, 3).ok()?;
-    base32::validate(suffix, 3).ok()?;
     Some((id_str.to_lowercase(), &after_prefix[close + 1..]))
 }
 
@@ -359,6 +393,34 @@ mod tests {
     }
 
     // ===================================================================
+    // Inter-marker whitespace tolerance (LLD: title is "the rest of the
+    // line, trimmed")
+    // ===================================================================
+
+    // @spec FMT-MARK-005
+    #[test]
+    fn parse_tab_between_markers_does_not_absorb_markers_into_title() {
+        let bullet = Bullet::parse("- [vat-g5y]\t[in-progress] task\n").unwrap();
+        assert_eq!(bullet.id, Some("vat-g5y".to_string()));
+        assert!(bullet.in_progress);
+        assert_eq!(bullet.title, "task");
+    }
+
+    // @spec FMT-MARK-005
+    #[test]
+    fn parse_tab_before_title_is_trimmed_and_serializes_canonically() {
+        let bullet = Bullet::parse("- [vat-g5y]\ttitle\n").unwrap();
+        assert_eq!(bullet.title, "title");
+        assert_eq!(bullet.serialize(), "- [vat-g5y] title\n");
+    }
+
+    #[test]
+    fn parse_trims_leading_whitespace_from_title() {
+        let bullet = Bullet::parse("-   \t My task\n").unwrap();
+        assert_eq!(bullet.title, "My task");
+    }
+
+    // ===================================================================
     // FMT-MARK-006 — unknown [...] → title
     // ===================================================================
 
@@ -408,6 +470,28 @@ mod tests {
             Bullet::parse("- [blocked-by:vat-f1w] [blocked-by:vat-h8x] My task\n").unwrap();
         assert_eq!(bullet.blocked_by, Some("vat-f1w".to_string()));
         assert_eq!(bullet.title, "My task");
+    }
+
+    // ===================================================================
+    // Duplicate single-occurrence markers — unlike [blocked-by:...]
+    // (FMT-MARK-007), a repeated [id]/[in-progress]/[by:...] is not
+    // discarded: it falls through to FMT-MARK-006 and starts the title.
+    // ===================================================================
+
+    // @spec FMT-MARK-006
+    #[test]
+    fn parse_second_by_marker_starts_the_title() {
+        let bullet = Bullet::parse("- [by:alice] [by:bob] title\n").unwrap();
+        assert_eq!(bullet.by, Some("alice".to_string()));
+        assert_eq!(bullet.title, "[by:bob] title");
+    }
+
+    // @spec FMT-MARK-006
+    #[test]
+    fn parse_second_id_marker_starts_the_title() {
+        let bullet = Bullet::parse("- [vat-g5y] [vat-h8x] title\n").unwrap();
+        assert_eq!(bullet.id, Some("vat-g5y".to_string()));
+        assert_eq!(bullet.title, "[vat-h8x] title");
     }
 
     // ===================================================================
@@ -463,6 +547,30 @@ mod tests {
     fn serialize_strips_trailing_whitespace_when_markers_present() {
         let bullet = b(Some("vat-g5y"), false, None, None, "title  ");
         assert_eq!(bullet.serialize(), "- [vat-g5y] title\n");
+    }
+
+    // @spec FMT-WS-002
+    #[test]
+    fn serialize_empty_title_emits_no_trailing_space() {
+        let bullet = b(Some("vat-g5y"), false, None, None, "");
+        assert_eq!(bullet.serialize(), "- [vat-g5y]\n");
+    }
+
+    // @spec FMT-WS-002
+    #[test]
+    fn serialize_whitespace_only_title_emits_no_trailing_space() {
+        let bullet = b(Some("vat-g5y"), true, None, None, "   ");
+        assert_eq!(bullet.serialize(), "- [vat-g5y] [in-progress]\n");
+    }
+
+    // serialize invariant — invalid stored ids are a caller bug, caught in
+    // debug builds rather than silently emitting a non-round-tripping line.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "not a valid <3>-<3> id")]
+    fn serialize_panics_in_debug_on_invalid_id() {
+        let bullet = b(Some("not-valid"), false, None, None, "title");
+        bullet.serialize();
     }
 
     // ===================================================================
