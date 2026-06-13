@@ -1,4 +1,4 @@
-// @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006, CMD-CC-001, CMD-CC-002, CMD-CC-003, CMD-CC-004
+// @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-002a, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006, CMD-CC-001, CMD-CC-002, CMD-CC-003, CMD-CC-004
 
 use std::path::Path;
 
@@ -15,7 +15,7 @@ use crate::file_io;
 ///
 /// v1 supports a single blocker per task: an existing different blocker is
 /// replaced, and re-blocking by the same id is an idempotent no-op (no write).
-// @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006
+// @spec CMD-BLOCK-001, CMD-BLOCK-002, CMD-BLOCK-002a, CMD-BLOCK-003, CMD-BLOCK-004, CMD-BLOCK-005, CMD-BLOCK-006
 pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     let id_lower = id.to_lowercase();
     let blocker_lower = blocker_id.to_lowercase();
@@ -51,30 +51,44 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
         EntryLookup::NotFound => return Err(UserError(format!("unknown id: {id}")).into()),
     };
 
-    // CMD-BLOCK-002: the blocker must match a *well-formed* bullet. Requiring a
-    // parseable bullet guarantees `blocker_lower` is a valid <3>-<3> id before it
-    // is written into a `[blocked-by:...]` marker — a marker pointing at an id the
-    // emitter would reject (FMT-MARK-004 invariant) must never be produced.
-    if !matches!(
-        find_entry_index(&region, &blocker_lower),
-        EntryLookup::Found(_)
-    ) {
-        return Err(UserError(format!("unknown blocker: {blocker_id}")).into());
+    // CMD-BLOCK-002 / CMD-BLOCK-002a: the blocker must match a *well-formed*
+    // bullet. Requiring a parseable bullet guarantees `blocker_lower` is a valid
+    // <3>-<3> id before it is written into a `[blocked-by:...]` marker — a marker
+    // pointing at an id the emitter would reject (FMT-MARK-004 invariant) must
+    // never be produced. A bullet whose leading `[id]` marker matches the blocker
+    // but fails to parse is reported as a parse failure (CMD-BLOCK-002a), mirroring
+    // the target-id handling above (CMD-CC-004), so the user is not told a plainly
+    // present id is "unknown".
+    match find_entry_index(&region, &blocker_lower) {
+        EntryLookup::Found(_) => {}
+        EntryLookup::Malformed(err) => {
+            return Err(UserError(format!(
+                "blocker {blocker_id} found but its bullet could not be parsed: {err}"
+            ))
+            .into());
+        }
+        EntryLookup::NotFound => {
+            return Err(UserError(format!("unknown blocker: {blocker_id}")).into());
+        }
     }
 
     let mut bullet = Bullet::parse(region.entries[entry_idx].bullet_line)
         .expect("entry bullet must parse: find_entry_index only returns parsable entries");
 
+    // Computed once and shared by both the no-op and the write path so the
+    // message format can never drift between them.
+    let success = format!("blocked {id_lower} by {blocker_lower}");
+
     // CMD-BLOCK-003: idempotent re-block by the same id is a no-op — return
     // success without touching the file.
     if bullet.blocked_by.as_deref() == Some(blocker_lower.as_str()) {
-        return Ok(format!("blocked {id_lower} by {blocker_lower}"));
+        return Ok(success);
     }
 
     // CMD-BLOCK-004 + CMD-BLOCK-005 + CMD-CC-003: set the blocker, replacing any
     // existing different one (v1 = single blocker). Bullet::serialize emits the
     // marker in canonical position ([blocked-by:...] after [by:...]).
-    bullet.blocked_by = Some(blocker_lower.clone());
+    bullet.blocked_by = Some(blocker_lower);
     let new_bullet_line = bullet.serialize();
 
     let new_parsed = serialize_region_with_replaced_bullet(&region, entry_idx, &new_bullet_line);
@@ -82,7 +96,7 @@ pub(crate) fn run(id: &str, blocker_id: &str, backlog_dir: &Path) -> anyhow::Res
     file_io::write(&backlog_path, &output)
         .with_context(|| format!("writing {}", backlog_path.display()))?;
 
-    Ok(format!("blocked {id_lower} by {blocker_lower}"))
+    Ok(success)
 }
 
 #[cfg(test)]
@@ -201,25 +215,30 @@ mod tests {
         assert_eq!(read_backlog(&backlog), original);
     }
 
-    // @spec CMD-BLOCK-002
+    // @spec CMD-BLOCK-002a
     #[test]
-    fn block_rejects_blocker_whose_only_bullet_is_malformed() {
+    fn block_reports_parse_error_when_blocker_bullet_malformed() {
         // `- [vat-f1w]` carries the id but has no title, so it does not parse to
-        // a well-formed bullet. The blocker id is therefore not confirmed valid
-        // and must be rejected rather than written into a marker.
+        // a well-formed bullet. The id is plainly present, so the user must see a
+        // parse diagnostic — not a misleading "unknown blocker" — mirroring the
+        // target-id handling (CMD-CC-004). It is still not written into a marker.
         let dir = TempDir::new().unwrap();
         let backlog = make_backlog_dir(&dir);
-        write_backlog(
-            &backlog,
-            &format!("{HEADER}- [vat-g5y] First\n- [vat-f1w]\n"),
-        );
+        let original = format!("{HEADER}- [vat-g5y] First\n- [vat-f1w]\n");
+        write_backlog(&backlog, &original);
 
         let err = run("vat-g5y", "vat-f1w", &backlog).unwrap_err();
+        let msg = err.to_string();
         assert!(
-            err.to_string().contains("unknown blocker: vat-f1w"),
-            "{}",
-            err.to_string()
+            msg.contains("blocker vat-f1w found but its bullet could not be parsed"),
+            "{msg}"
         );
+        assert!(
+            !msg.contains("unknown blocker"),
+            "must not report a present-but-malformed blocker as unknown: {msg}"
+        );
+        // No write on the error path.
+        assert_eq!(read_backlog(&backlog), original);
     }
 
     // -----------------------------------------------------------------------

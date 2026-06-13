@@ -52,7 +52,10 @@ After mutation, the helper serializes the parsed region back through the same em
 
 1. Self-block guard: error if `id == blocker-id` (case-insensitive). This is a pure-argument check independent of file state, so it runs before any lookup — the error names the real mistake (the same id typed twice) even when that id is absent from the backlog.
 2. `find_entry(id)`.
-3. Verify `<blocker-id>` matches a **well-formed** bullet in the parsed region. If not, error: `unknown blocker: <blocker-id>`. The bullet must parse so the blocker id is known to be a valid `<3>-<3>` id before it is written into a `[blocked-by:...]` marker; a marker pointing at an id the emitter would reject must never be produced.
+3. Verify `<blocker-id>` matches a **well-formed** bullet in the parsed region. The bullet must parse so the blocker id is known to be a valid `<3>-<3>` id before it is written into a `[blocked-by:...]` marker; a marker pointing at an id the emitter would reject must never be produced. Three outcomes, mirroring the target lookup in step 2:
+   - a well-formed bullet carries the id → proceed;
+   - a bullet's leading `[id]` marker matches but the bullet fails to parse → error describing the parse failure (not `unknown blocker`), so a plainly-present id is never reported as unknown (mirrors CMD-CC-004 for the target);
+   - no bullet carries the id → error: `unknown blocker: <blocker-id>`.
 4. If the entry already has `[blocked-by:<blocker-id>]` (same blocker), no-op (success) — no write.
 5. Otherwise set `[blocked-by:<blocker-id>]` in canonical position, replacing any existing `[blocked-by:<other>]` (v1 supports a single blocker per task), and write.
 
