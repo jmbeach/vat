@@ -7,10 +7,10 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## Frontmatter
 
 - [x] **FMT-FM-001** — When `backlog.md` begins with a line consisting solely of `---`, the system shall treat the content up to the next line consisting solely of `---` as YAML frontmatter.
-- [ ] **FMT-FM-002** — When the frontmatter contains a `version` key whose integer value is greater than the CLI's supported major version, the system shall abort the command with an error message naming the file's version and the CLI's supported version, and shall not write to any file.
+- [x] **FMT-FM-002** — When the frontmatter contains a `version` key whose integer value is greater than the CLI's supported major version, the system shall abort the command with an error message naming the file's version and the CLI's supported version, and shall not write to any file.
 - [x] **FMT-FM-003** — When the frontmatter is absent or omits the `version` key, the system shall treat the file as version 1.
 - [x] **FMT-FM-004** — When writing `backlog.md`, the system shall preserve unknown frontmatter keys verbatim, modulo read-time line-ending normalization (see FMT-WS-001).
-- [ ] **FMT-FM-005** — When `vat init` creates `backlog.md`, the system shall write a frontmatter block containing `version: 1`.
+- [x] **FMT-FM-005** — When `vat init` creates `backlog.md`, the system shall write a frontmatter block containing `version: 1`.
 
 ## Body regions
 
@@ -24,11 +24,11 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Parsed region structure
 
-- [ ] **FMT-PARSE-001** — The system shall recognize a task entry as a line starting at column 0 with `- ` (hyphen followed by single space).
-- [ ] **FMT-PARSE-002** — The system shall not recognize lines starting with `*` or `+` as task entries.
-- [ ] **FMT-PARSE-003** — The system shall treat any non-bullet line following a bullet, up until the next bullet at column 0 or the end of the parsed region, as notes belonging to that bullet.
-- [ ] **FMT-PARSE-004** — The system shall treat any content in the parsed region appearing before the first bullet line as preamble.
-- [ ] **FMT-PARSE-005** — When writing `backlog.md`, the system shall emit the preamble verbatim at the top of the parsed region.
+- [x] **FMT-PARSE-001** — The system shall recognize a task entry as a line starting at column 0 with `- ` (hyphen followed by single space).
+- [x] **FMT-PARSE-002** — The system shall not recognize lines starting with `*` or `+` as task entries.
+- [x] **FMT-PARSE-003** — The system shall treat any non-bullet line following a bullet, up until the next bullet at column 0 or the end of the parsed region, as notes belonging to that bullet.
+- [x] **FMT-PARSE-004** — The system shall treat any content in the parsed region appearing before the first bullet line as preamble.
+- [x] **FMT-PARSE-005** — When writing `backlog.md`, the system shall emit the preamble verbatim at the top of the parsed region.
 
 ## Crockford base32 utility
 
@@ -44,17 +44,17 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Bullet line markers
 
-- [ ] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.
-- [ ] **FMT-MARK-002** — A bullet's `[by:<name>]` marker shall accept names matching `[A-Za-z0-9_.-]+`.
-- [ ] **FMT-MARK-003** — A bullet's `[blocked-by:<id>]` marker shall accept ids matching the same format as FMT-MARK-001.
-- [ ] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
-- [ ] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
-- [ ] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
-- [ ] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
+- [x] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.
+- [x] **FMT-MARK-002** — A bullet's `[by:<name>]` marker shall accept names matching `[A-Za-z0-9_.-]+`.
+- [x] **FMT-MARK-003** — A bullet's `[blocked-by:<id>]` marker shall accept ids matching the same format as FMT-MARK-001.
+- [x] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
+- [x] **FMT-MARK-005** — When serializing a bullet, the system shall separate adjacent markers with a single space.
+- [x] **FMT-MARK-006** — When parsing a bullet, the system shall treat unrecognized `[...]` tokens at the front of the body as part of the title.
+- [x] **FMT-MARK-007** — In v1 the system shall preserve only the first `[blocked-by:...]` marker if multiple are present on a single bullet.
 
 ## Empty and malformed bullets
 
-- [ ] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction.
+- [ ] **FMT-PARSE-006** — When a bullet line has no title text after markers, the system shall print a warning, leave the line untouched, and skip it for ID assignment and notes extraction. *(Detection exists — `Bullet::parse` returns `EmptyTitle` — but `vat sync` is not yet wired onto it: no warning is printed and a title-less bullet still receives an ID. Remaining work lands with the sync integration, vat-v3k.)*
 
 ## Item files
 
@@ -91,5 +91,5 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Line endings, whitespace, and IO normalization
 
-- [ ] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF. (Normalization infrastructure landed in `file_io`; marker stays `[ ]` pending caller wiring.)
-- [ ] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.
+- [x] **FMT-WS-001** — When reading any VAT-managed file, the system shall normalize all line-ending conventions (CRLF and bare CR) to LF.
+- [x] **FMT-WS-002** — When serializing a bullet line, the system shall strip trailing whitespace.

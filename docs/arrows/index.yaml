@@ -1,0 +1,63 @@
+schema_version: 1
+last_updated: 2026-06-12
+
+# Taxonomy groups segments by domain cluster.
+taxonomy:
+  data-layer:
+    - backlog-format
+  command-layer:
+    - sync
+    - commands
+    - cli
+
+# The graph of segments.
+arrows:
+  backlog-format:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-12
+    audited_sha: 9dbd445
+    blocks: [sync, commands]
+    blockedBy: []
+    detail: backlog-format.md
+    next: "Implement marker parsing (FMT-MARK-001 to 007) and wire FMT-WS-002 serializer"
+    drift: null
+
+  sync:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-12
+    audited_sha: 9dbd445
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: sync.md
+    next: "Marker normalization and pointer suffixes blocked on FMT-MARK-* in backlog-format (ID assignment landed via vat-s9g, PR #20)"
+    drift: "src/sync.rs carries a @spec SYNC-WRITE-001 test annotation but the spec marker is still [ ] — full idempotence pending ID assignment + marker normalization"
+
+  commands:
+    status: PARTIAL
+    sampled: 2026-06-09
+    audited: 2026-06-12
+    audited_sha: 9dbd445
+    blocks: []
+    blockedBy: [backlog-format]
+    detail: commands.md
+    next: "Implement start, block, unblock, done — blocked on FMT-MARK-*. Exit codes (CMD-EXIT-001..003) implemented for cmd_config; thread classify_exit_code through cmd_init/cmd_sync."
+    drift: "classify_exit_code() wired only through cmd_config_get/cmd_config_set; cmd_init and cmd_sync still exit 1 for all errors. CMD-EXIT-003 ([x]) requires every command to route through classification."
+
+  cli:
+    status: MAPPED
+    sampled: 2026-06-09
+    audited: 2026-06-12
+    audited_sha: 9dbd445
+    blocks: []
+    blockedBy: []
+    detail: cli.md
+    next: "Create docs/specs/cli-specs.md to formalize CLI behavioral requirements (argument parsing, error rendering, exit codes)"
+    drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
+
+# Items found during mapping that don't yet belong to a segment.
+unmapped:
+  docs:
+    llds: []
+    specs: []

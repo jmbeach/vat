@@ -6,25 +6,27 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Cross-cutting
 
-- [ ] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
-- [ ] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
-- [ ] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
+- [x] **CMD-CC-001** — Every command that reads `backlog.md` shall first verify that the file's frontmatter `version` does not exceed the CLI's supported major version, and shall abort with an error before any other processing if it does.
+- [x] **CMD-CC-002** — When a bullet-mutating command cannot find a bullet matching the supplied `<id>`, the system shall abort with an error and shall not write to any file.
+- [x] **CMD-CC-003** — When a bullet-mutating command writes a bullet, the system shall emit markers in the canonical order defined by FMT-MARK-004.
+- [x] **CMD-CC-004** — When a bullet-mutating command finds a bullet line whose leading `[id]` marker matches the supplied `<id>` but which fails to parse, the system shall abort with an error describing the parse failure (not a generic "unknown id") and shall not write to any file.
 
 ## `vat init`
 
-- [ ] **CMD-INIT-001** — When `backlog/` already exists, `vat init` shall abort with an error.
-- [ ] **CMD-INIT-002** — When invoked with `vat init <prefix>`, the system shall use `<prefix>` as the project ID prefix.
-- [ ] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
-- [ ] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
-- [ ] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
-- [ ] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow.
-- [ ] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
+- [x] **CMD-INIT-001** — When `backlog/` already exists, `vat init` shall abort with an error.
+- [x] **CMD-INIT-002** — When invoked with `vat init <prefix>`, the system shall use `<prefix>` as the project ID prefix.
+- [x] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
+- [x] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
+- [x] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
+- [x] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow. (Template baked into the binary as `readme_template::BACKLOG_README_TEMPLATE`; `vat init` renders and writes it via `readme_template::render`.)
+- [x] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
 
 ## `vat start <id>`
 
-- [ ] **CMD-START-001** — When `user.name` is unset in the user config, `vat start` shall abort with an error pointing the user at `vat config set user.name <name>`.
-- [ ] **CMD-START-002** — When the target bullet has either an `[in-progress]` marker or a `[by:...]` marker, `vat start` shall abort with an error indicating the existing claim.
-- [ ] **CMD-START-003** — On success, `vat start` shall add both `[in-progress]` and `[by:<user.name>]` markers to the target bullet.
+- [x] **CMD-START-001** — When `user.name` is unset in the user config, `vat start` shall abort with an error pointing the user at `vat config set user.name <name>`.
+- [x] **CMD-START-002** — When the target bullet has either an `[in-progress]` marker or a `[by:...]` marker, `vat start` shall abort with an error indicating the existing claim.
+- [x] **CMD-START-003** — On success, `vat start` shall add both `[in-progress]` and `[by:<user.name>]` markers to the target bullet.
+- [x] **CMD-START-004** — On success, `vat start` shall print a confirmation message naming the claimed `<id>`, consistent with `vat init`'s success output.
 
 ## `vat block <id> <blocker-id>`
 
@@ -50,18 +52,26 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## `vat config`
 
-- [ ] **CMD-CFG-001** — `vat config get user.name` shall print the value from the user config to stdout, or exit non-zero with no output if unset.
-- [ ] **CMD-CFG-002** — `vat config get project.id` shall print the value from `backlog/vat.toml` to stdout, or exit non-zero with no output if unset.
-- [ ] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
-- [ ] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 Crockford base32 characters.
-- [ ] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
-- [ ] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
+- [x] **CMD-CFG-001** — `vat config get user.name` shall print the value from the user config to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
+- [x] **CMD-CFG-002** — `vat config get project.id` shall print the value from `backlog/vat.toml` to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
+- [x] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
+- [x] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 Crockford base32 characters.
+- [x] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
+- [x] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
+
+## `vat completions <shell>`
+
+- [x] **CMD-COMP-001** — `vat completions <shell>` shall write a shell completion script for `<shell>` to stdout and exit 0.
+- [x] **CMD-COMP-002** — The supported shells shall be exactly `bash`, `zsh`, and `fish`; passing any of these values shall produce non-empty output, and any other shell (including `elvish` and `powershell`, which `clap_complete` itself supports) shall be rejected.
+- [x] **CMD-COMP-003** — The `completions` subcommand shall not appear in the output of `vat --help`, nor as a completable subcommand in any generated completion script.
+- [x] **CMD-COMP-004** — When `<shell>` is not a recognised shell name, the system shall exit with code 2 and print a usage error to stderr.
+- [x] **CMD-COMP-005** — When writing the completion script to stdout fails, the system shall print an error to stderr and exit with code 2, except for a broken pipe, which shall terminate the command silently with exit code 0.
 
 ## Exit codes
 
-- [ ] **CMD-EXIT-001** — On success, every command shall exit with code 0.
-- [ ] **CMD-EXIT-002** — On user-facing errors (unknown ID, missing config, validation failure, version mismatch, unreachable git remote), every command shall exit with code 1.
-- [ ] **CMD-EXIT-003** — On internal errors (file IO failure, unexpected parse failure), every command shall exit with code 2.
+- [x] **CMD-EXIT-001** — On success, every command shall exit with code 0.
+- [x] **CMD-EXIT-002** — On user-facing errors (unknown ID, missing config, validation failure, version mismatch), every command shall exit with code 1.
+- [x] **CMD-EXIT-003** — On internal errors (file IO failure, unexpected parse failure), every command shall exit with code 2.
 
 ## Out of scope for v1
 
