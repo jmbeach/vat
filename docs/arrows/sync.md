@@ -21,6 +21,7 @@
 - src/sync.rs (inline `#[cfg(test)]` — integration tests covering SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-001/002/003/004, SYNC-MARK-001/002/003/004, SYNC-ID-001/002/004/005/006, FMT-PARSE-006)
 - src/id_assignment.rs (inline `#[cfg(test)]` — unit tests covering SYNC-ID-001/002/003/005/006)
 - src/item_file.rs (inline `#[cfg(test)]` — SYNC-NOTES-004 indentation stripping)
+- tests/sync_golden.rs (fixture-directory golden tests driving the real `vat sync` binary; pins SYNC-ID-001/004, SYNC-WRITE-001/002, SYNC-NOTES-002/003/005, SYNC-MARK-003 against `tests/fixtures/sync/<case>/{input,expected}` trees)
 
 ### Code
 - src/sync.rs — sync engine: bullet parse/serialize wiring, marker normalization, ID assignment wiring, notes extraction, preconditions, write-skip, tombstone append (SYNC-MARK-*, SYNC-ID-004, SYNC-NOTES-*, SYNC-PRE-*, SYNC-WRITE-*, FMT-PARSE-006)
