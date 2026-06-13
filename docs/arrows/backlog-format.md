@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-12 (git SHA `9dbd445`). Core parsing fully implemented across 7 modules. FMT-FM-005 now implemented (cmd_init.rs, PR #29). FMT-MARK-* (bullet marker parsing) is the largest gap and blocks both `sync` and the bullet-mutating commands.
+**COMPLETE** — last audited 2026-06-12 (vat-v3k, on top of `03b355d`). All 55 active specs implemented across 8 modules. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`.
 
 ## References
 
@@ -15,7 +15,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - docs/llds/backlog-format.md
 
 ### EARS
-- docs/specs/backlog-format-specs.md (55 active specs: 46 implemented, 9 gaps)
+- docs/specs/backlog-format-specs.md (55 active specs: 55 implemented, 0 gaps)
 
 ### Tests
 - src/backlog_file.rs (inline `#[cfg(test)]`)
@@ -25,6 +25,8 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - src/project_config.rs (inline `#[cfg(test)]`)
 - src/file_io.rs (inline `#[cfg(test)]`)
 - src/item_file.rs (inline `#[cfg(test)]`)
+- src/bullet.rs (inline `#[cfg(test)]` — FMT-MARK-001 to 007, FMT-PARSE-006, FMT-WS-002)
+- src/sync.rs (inline `#[cfg(test)]` — FMT-PARSE-006 warn-and-skip integration)
 
 ### Code
 - src/backlog_file.rs — FMT-FM-*, FMT-RGN-*, FMT-PARSE-*
@@ -34,6 +36,8 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - src/project_config.rs — FMT-CFG-*
 - src/file_io.rs — FMT-WS-001 (line-ending normalization; wired into cmd_config and sync)
 - src/item_file.rs — FMT-ITEM-*, SYNC-NOTES-004
+- src/bullet.rs — FMT-MARK-001 to 007, FMT-PARSE-006 (detection), FMT-WS-002
+- src/sync.rs — FMT-PARSE-006 (warn-and-skip entry point)
 
 ## Architecture
 
@@ -47,6 +51,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 5. `src/project_config.rs` — project config parse/serialize/load/save
 6. `src/file_io.rs` — shared read/write with LF line-ending normalization
 7. `src/item_file.rs` — per-task item file create/append + notes indentation stripping
+8. `src/bullet.rs` — bullet-line marker tokenizer: `Bullet::parse`/`serialize` (greedy front-loaded marker parsing, canonical-order serialization)
 
 ## Spec Coverage
 
@@ -54,35 +59,30 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 |----------|----------|-------------|----------|------|
 | Frontmatter | FMT-FM-001 to 005 | 5 | 0 | 0 |
 | Body regions | FMT-RGN-001 to 007 | 7 | 0 | 0 |
-| Parsed region structure | FMT-PARSE-001 to 006 | 5 | 0 | 1 |
+| Parsed region structure | FMT-PARSE-001 to 006 | 6 | 0 | 0 |
 | Crockford base32 | FMT-B32-001 to 007 | 7 | 0 | 0 |
-| Bullet line markers | FMT-MARK-001 to 007 | 0 | 0 | 7 |
+| Bullet line markers | FMT-MARK-001 to 007 | 7 | 0 | 0 |
 | Item files | FMT-ITEM-001 to 003 | 3 | 0 | 0 |
 | Tombstone file | FMT-TOMB-001 to 009 | 9 | 0 | 0 |
 | Project config | FMT-CFG-001 to 003 | 3 | 0 | 0 |
 | User config | FMT-USR-001 to 006 | 6 | 0 | 0 |
-| Line endings / WS | FMT-WS-001 to 002 | 1 | 0 | 1 |
+| Line endings / WS | FMT-WS-001 to 002 | 2 | 0 | 0 |
 
-**Summary:** 46 of 55 active specs implemented; 0 deferred; 9 gaps. FMT-MARK-* (7 specs) is the largest gap and the primary blocker for other segments.
+**Summary:** 55 of 55 active specs implemented; 0 deferred; 0 gaps. The segment no longer blocks `sync`; `commands` remains a consumer of `src/bullet.rs`.
 
 ## Key Findings
 
-1. **FMT-MARK-* entirely absent** — No `@spec FMT-MARK-*` annotations appear anywhere in the source. `src/backlog_file.rs` parses task entries (bullet lines + notes) but does not yet parse or serialize the individual marker tokens within a bullet. This is the critical missing piece that blocks `vat sync` (marker normalization) and all bullet-mutating commands (`start`, `block`, `unblock`, `done`).
+1. **FMT-MARK-* implemented** — `src/bullet.rs` (vat-g5y, PR #46) implements the greedy front-loaded marker tokenizer (`Bullet::parse`) and canonical-order serializer (`Bullet::serialize`) with full inline tests. `vat sync` is wired onto it (vat-v3k); the bullet-mutating commands (`start`, `block`, `unblock`, `done`) can now consume it.
 
 2. **FMT-WS-001 implemented** — The earlier drift signal is resolved: `vat sync` (vat-t1h, PR #32) reads `backlog.md` through `file_io::read_to_string`, completing the caller wiring, and the spec marker flipped to `[x]`. `src/file_io.rs` carries the `@spec FMT-WS-001` annotations and tests.
 
 3. **FMT-FM-005 implemented** — `cmd_init.rs:write_backlog_files` (PR #29) writes `"---\nversion: 1\n---\n"` to `backlog.md`, satisfying this spec. `@spec FMT-FM-005` annotation added to `src/cmd_init.rs`.
 
-4. **FMT-PARSE-006 gap** — Empty/malformed bullet warning behavior not implemented. `src/backlog_file.rs` parses entries but has no warning path for empty bullets.
+4. **FMT-PARSE-006 implemented** — Detection (`Bullet::parse` → `EmptyTitle`) lives in `src/bullet.rs`; the warn-and-skip behavior (warning printed, line and note lines preserved verbatim, no ID assignment, no notes extraction) lives in `src/sync.rs` (vat-v3k).
 
-5. **FMT-WS-002 gap** — Trailing whitespace stripping on bullet serialization not implemented (no `@spec FMT-WS-002` annotations anywhere).
+5. **FMT-WS-002 implemented** — `Bullet::serialize` strips trailing whitespace (PR #46).
 
 ## Work Required
 
-### Must Fix
-1. Implement marker parsing and serialization (FMT-MARK-001 to 007) — unblocks `sync` and all bullet-mutating commands. This is the segment's top priority.
-
-### Should Fix
-2. Wire FMT-WS-002: strip trailing whitespace in bullet serializer (backlog_file.rs serialize path).
-3. Implement FMT-PARSE-006: empty-bullet warning in the parsed-region parser.
+None — all active specs implemented. Future consumers: the bullet-mutating commands (`start`, `block`, `unblock`, `done`) should build on `src/bullet.rs` rather than re-parsing lines.
 
