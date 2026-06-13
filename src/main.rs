@@ -5,6 +5,7 @@ mod cmd_completions;
 mod cmd_config;
 mod cmd_init;
 mod cmd_start;
+mod cmd_unblock;
 mod errors;
 mod file_io;
 mod id_assignment;
@@ -99,7 +100,7 @@ fn main() {
         Commands::Sync => cmd_sync(),
         Commands::Start { id } => cmd_start(&id),
         Commands::Block { id, blocker_id } => cmd_block(id, blocker_id),
-        Commands::Unblock { id } => cmd_unblock(id),
+        Commands::Unblock { id } => cmd_unblock(&id),
         Commands::Done { id } => cmd_done(id),
         Commands::Config { action } => match action {
             ConfigAction::Get { key } => cmd_config_get(&key),
@@ -177,9 +178,16 @@ fn cmd_block(_id: String, _blocker_id: String) {
     std::process::exit(1);
 }
 
-fn cmd_unblock(_id: String) {
-    eprintln!("vat unblock: not yet implemented");
-    std::process::exit(1);
+// @spec CMD-UNBLOCK-001, CMD-UNBLOCK-002
+fn cmd_unblock(id: &str) {
+    let backlog_dir = std::path::Path::new("backlog");
+    match cmd_unblock::run(id, backlog_dir) {
+        Ok(msg) => println!("{msg}"),
+        Err(e) => {
+            eprintln!("error: {e:#}");
+            std::process::exit(classify_exit_code(&e));
+        }
+    }
 }
 
 fn cmd_done(_id: String) {

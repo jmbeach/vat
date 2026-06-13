@@ -47,7 +47,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 | `vat init` | CMD-INIT-001 to 007 | 7 | 0 | 0 |
 | `vat start` | CMD-START-001 to 003 | 0 | 0 | 3 |
 | `vat block` | CMD-BLOCK-001 to 006 | 0 | 0 | 6 |
-| `vat unblock` | CMD-UNBLOCK-001 to 002 | 0 | 0 | 2 |
+| `vat unblock` | CMD-UNBLOCK-001 to 002 | 2 | 0 | 0 |
 | `vat done` | CMD-DONE-001 to 005 | 0 | 0 | 5 |
 | `vat config` | CMD-CFG-001 to 006 | 6 | 0 | 0 |
 | Exit codes | CMD-EXIT-001 to 003 | 2 | 0 | 1 |
@@ -63,7 +63,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 3. **CMD-CC-001 implemented** — Version check on `backlog.md` reads is wired in `src/backlog_file.rs:163` (`check_version`). CMD-CC-002 (unknown ID error) and CMD-CC-003 (canonical marker emit) are gaps requiring the `find_entry` helper and marker parser.
 
-4. **start/block/unblock/done are stubs** — `src/main.rs:135–153` shows each as "not yet implemented". Start, block, unblock, and done all need the `find_entry` shared helper and marker manipulation, which in turn need FMT-MARK-* from `backlog-format`.
+4. **block/done remain stubs; start and unblock are implemented** — `vat start` (`src/cmd_start.rs`) and `vat unblock` (`src/cmd_unblock.rs`) both build on the `find_entry_index`/`EntryLookup` lookup and `serialize_region_with_replaced_bullet` emitter (interim-shared from `cmd_start`; vat-m2k will consolidate). `vat unblock` clears the `[blocked-by:...]` field and re-serializes (CMD-UNBLOCK-002), or no-ops without writing when there is no blocker (CMD-UNBLOCK-001). `block` and `done` are still "not yet implemented" stubs in `src/main.rs` and need the same helper plus marker manipulation.
 
 5. **Exit-code framework (CMD-EXIT-001 to 003) implemented for cmd_config** — `classify_exit_code()` at `src/main.rs:183` chain-searches the anyhow error for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. 17 unit tests in `src/main.rs`; all three exit codes are `@spec`-annotated. **Partial coverage:** `classify_exit_code` is currently wired only through `cmd_config_get` and `cmd_config_set` — `cmd_init` and `cmd_sync` still exit 1 for all errors.
 
