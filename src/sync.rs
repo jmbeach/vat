@@ -1,4 +1,5 @@
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
+// @spec SYNC-PTR-001, SYNC-PTR-002, SYNC-PTR-003
 // @spec SYNC-PRE-001, SYNC-PRE-002
 // @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
@@ -89,6 +90,13 @@ struct PendingWrite {
 /// - In all cases clears the notes from the entry in `backlog.md`
 ///   (SYNC-NOTES-001, SYNC-NOTES-005).
 ///
+/// After notes extraction, when the entry's id has a corresponding item file
+/// (pre-existing on disk or just created from its notes), ensures the bullet's
+/// title ends with the canonical pointer suffix ` (see ./items/<id>.md)`,
+/// appending it only when absent (SYNC-PTR-001, idempotent per SYNC-PTR-003).
+/// When no item file exists the suffix is neither added nor stripped
+/// (SYNC-PTR-002).
+///
 /// Writes are all-or-nothing: parsing and ID generation finish before any
 /// file is touched (SYNC-WRITE-003), and a second run on canonical output is
 /// byte-identical (SYNC-WRITE-001). Skips the `backlog.md` write when the
@@ -96,6 +104,7 @@ struct PendingWrite {
 /// the returned [`SyncOutcome`]. Creates `backlog/items/` on demand via
 /// `item_file::write_new_stripped` (SYNC-WRITE-004).
 // @spec SYNC-NOTES-001, SYNC-NOTES-002, SYNC-NOTES-003, SYNC-NOTES-004, SYNC-NOTES-005
+// @spec SYNC-PTR-001, SYNC-PTR-002, SYNC-PTR-003
 // @spec SYNC-PRE-001, SYNC-PRE-002
 // @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
@@ -215,33 +224,7 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
     // truly atomic.  A crash between A and B leaves orphaned item-file writes
     // that will be re-processed and double-appended on the next `vat sync` run.
     // Truly atomic cross-file writes require OS support that is out of scope.
-    let mut pending: Vec<PendingWrite> = Vec::new();
-
-    for (i, entry) in region.entries.iter_mut().enumerate() {
-        // FMT-PARSE-006: a malformed bullet keeps its note lines in place —
-        // clearing them without an item file to receive them would silently
-        // destroy the notes.
-        let Some(bullet) = &parsed[i] else { continue };
-
-        if !entry.notes.is_empty() {
-            let stripped = item_file::strip_notes(entry.notes);
-            // Every well-formed bullet has an ID after `assign_ids`; a bullet
-            // that just received one extracts its notes to that ID's item file
-            // (LLD step 5: assignment happens before extraction).
-            if !stripped.is_empty()
-                && let Some(id) = &bullet.id
-            {
-                pending.push(PendingWrite {
-                    item_path: items_dir.join(format!("{id}.md")),
-                    id: id.clone(),
-                    stripped,
-                });
-            }
-        }
-
-        // SYNC-NOTES-001, SYNC-NOTES-005: always clear notes from this entry.
-        entry.notes = "";
-    }
+    let pending = extract_notes_and_link(&mut region, &mut parsed, &items_dir);
 
     // Serialize. Well-formed bullets are re-emitted in canonical form —
     // markers in canonical order with single-space separators (SYNC-MARK-001),
@@ -296,6 +279,81 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
     tombstone::append(&used_ids_path, &new_id_refs)?;
 
     Ok(SyncOutcome::Wrote)
+}
+
+/// Per well-formed entry: queue its notes for extraction into an item file,
+/// clear the notes from the bullet, and link the bullet to its item file with
+/// the pointer suffix. Returns the queued item-file writes — nothing is written
+/// here; all writes happen at the end of [`run_impl`], after serialization.
+///
+/// `parsed` is positionally aligned with `region.entries`; a `None` slot is a
+/// malformed (title-less) bullet, which keeps its note lines in place — clearing
+/// them without an item file to receive them would silently destroy the notes
+/// (FMT-PARSE-006).
+// @spec SYNC-NOTES-001, SYNC-NOTES-005, FMT-PARSE-006
+fn extract_notes_and_link(
+    region: &mut ParsedRegion,
+    parsed: &mut [Option<Bullet>],
+    items_dir: &Path,
+) -> Vec<PendingWrite> {
+    let mut pending: Vec<PendingWrite> = Vec::new();
+    for (i, entry) in region.entries.iter_mut().enumerate() {
+        let Some(bullet) = parsed[i].as_mut() else {
+            continue;
+        };
+
+        // `extracting_notes` records whether a (new or appended) item file is
+        // queued for this id this run; combined with the on-disk check in
+        // `apply_pointer_suffix` it answers "will an item file exist after sync?"
+        let mut extracting_notes = false;
+        if !entry.notes.is_empty() {
+            let stripped = item_file::strip_notes(entry.notes);
+            // Every well-formed bullet has an ID after `assign_ids`; a bullet
+            // that just received one extracts its notes to that ID's item file
+            // (LLD step 5: assignment happens before extraction).
+            if !stripped.is_empty()
+                && let Some(id) = &bullet.id
+            {
+                pending.push(PendingWrite {
+                    item_path: items_dir.join(format!("{id}.md")),
+                    id: id.clone(),
+                    stripped,
+                });
+                extracting_notes = true;
+            }
+        }
+
+        // SYNC-NOTES-001, SYNC-NOTES-005: always clear notes from this entry.
+        entry.notes = "";
+
+        // SYNC-PTR-001..003: link the bullet to its item file (if one exists)
+        // before serialization, so the suffix is part of the SYNC-WRITE-002
+        // byte-identical comparison.
+        apply_pointer_suffix(bullet, items_dir, extracting_notes);
+    }
+    pending
+}
+
+/// Ensure `bullet`'s title ends with the canonical ` (see ./items/<id>.md)`
+/// pointer suffix when an item file exists for its id.
+///
+/// An item file is considered to exist when `extracting_notes` is true (a new
+/// or appended file is queued for this id this run) or when `items/<id>.md` is
+/// already on disk. The append is idempotent — `ends_with` guards against
+/// re-adding the suffix (SYNC-PTR-003) — and conservative: when no item file
+/// exists the title is left untouched, so an existing suffix is never stripped
+/// (SYNC-PTR-002). A bullet with no id is left untouched.
+// @spec SYNC-PTR-001, SYNC-PTR-002, SYNC-PTR-003
+fn apply_pointer_suffix(bullet: &mut Bullet, items_dir: &Path, extracting_notes: bool) {
+    let Some(id) = bullet.id.clone() else { return };
+    let item_exists = extracting_notes || items_dir.join(format!("{id}.md")).exists();
+    if !item_exists {
+        return;
+    }
+    let suffix = format!(" (see ./items/{id}.md)");
+    if !bullet.title.ends_with(&suffix) {
+        bullet.title.push_str(&suffix);
+    }
 }
 
 #[cfg(test)]
@@ -361,7 +419,9 @@ mod tests {
         write_backlog(&dir, "- [vat-t1h] Title\n  note line\n");
         run(dir.path()).unwrap();
         let out = read_backlog(&dir);
-        assert_eq!(out, "- [vat-t1h] Title\n");
+        // SYNC-PTR-001: extracting the note creates the item file, so the
+        // bullet gains the pointer suffix.
+        assert_eq!(out, "- [vat-t1h] Title (see ./items/vat-t1h.md)\n");
         assert!(!out.contains("note line"));
     }
 
@@ -375,7 +435,12 @@ mod tests {
         );
         run(dir.path()).unwrap();
         let out = read_backlog(&dir);
-        assert_eq!(out, "- [vat-t1h] First\n- [vat-g5y] Second\n");
+        // SYNC-PTR-001: each note creates an item file, so each bullet gains
+        // its own pointer suffix.
+        assert_eq!(
+            out,
+            "- [vat-t1h] First (see ./items/vat-t1h.md)\n- [vat-g5y] Second (see ./items/vat-g5y.md)\n"
+        );
     }
 
     // ── SYNC-NOTES-002 ───────────────────────────────────────────────────────
@@ -488,6 +553,112 @@ mod tests {
         assert!(!item_path.exists());
         let out = read_backlog(&dir);
         assert_eq!(out, "- [vat-t1h] Title\n");
+    }
+
+    // ── SYNC-PTR-001..003 (item-file pointer suffix) ─────────────────────────
+
+    // @spec SYNC-PTR-001
+    #[test]
+    fn run_appends_pointer_suffix_when_item_file_created() {
+        let dir = setup();
+        // A fresh note creates items/vat-t1h.md, so the bullet must gain the
+        // canonical pointer suffix.
+        write_backlog(&dir, "- [vat-t1h] Title\n  A note.\n");
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] Title (see ./items/vat-t1h.md)\n"
+        );
+    }
+
+    // @spec SYNC-PTR-001
+    #[test]
+    fn run_appends_pointer_suffix_when_item_file_preexists_without_notes() {
+        let dir = setup();
+        // The item file already exists and the bullet has no notes this run;
+        // the suffix is still added because the file exists.
+        let items_dir = dir.path().join("items");
+        fs::create_dir_all(&items_dir).unwrap();
+        fs::write(
+            items_dir.join("vat-t1h.md"),
+            "---\nid: vat-t1h\n---\n\nExisting.\n",
+        )
+        .unwrap();
+        write_backlog(&dir, "- [vat-t1h] Title\n");
+        run(dir.path()).unwrap();
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] Title (see ./items/vat-t1h.md)\n"
+        );
+    }
+
+    // @spec SYNC-PTR-002
+    #[test]
+    fn run_does_not_add_pointer_suffix_when_no_item_file() {
+        let dir = setup();
+        // No notes, no pre-existing item file → no suffix.
+        let content = "- [vat-t1h] Title\n";
+        write_backlog(&dir, content);
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), content);
+    }
+
+    // @spec SYNC-PTR-002
+    #[test]
+    fn run_does_not_add_suffix_for_whitespace_only_notes() {
+        let dir = setup();
+        // Whitespace-only notes never create an item file (SYNC-NOTES-005), so
+        // no suffix is added either.
+        write_backlog(&dir, "- [vat-t1h] Title\n   \n");
+        run(dir.path()).unwrap();
+        assert_eq!(read_backlog(&dir), "- [vat-t1h] Title\n");
+        assert!(!dir.path().join("items").join("vat-t1h.md").exists());
+    }
+
+    // @spec SYNC-PTR-002
+    #[test]
+    fn run_keeps_existing_suffix_when_item_file_missing() {
+        let dir = setup();
+        // The user hand-deleted the item file but left the suffix. Sync is
+        // conservative: it never strips the suffix, even with no file present.
+        let content = "- [vat-t1h] Title (see ./items/vat-t1h.md)\n";
+        write_backlog(&dir, content);
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Skipped, "nothing to change");
+        assert_eq!(read_backlog(&dir), content);
+    }
+
+    // @spec SYNC-PTR-003
+    #[test]
+    fn run_does_not_double_append_pointer_suffix() {
+        let dir = setup();
+        // Title already carries the canonical suffix and the item file exists:
+        // re-sync leaves it untouched (idempotent, no doubling).
+        let items_dir = dir.path().join("items");
+        fs::create_dir_all(&items_dir).unwrap();
+        fs::write(
+            items_dir.join("vat-t1h.md"),
+            "---\nid: vat-t1h\n---\n\nExisting.\n",
+        )
+        .unwrap();
+        let content = "- [vat-t1h] Title (see ./items/vat-t1h.md)\n";
+        write_backlog(&dir, content);
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Skipped, "already canonical");
+        assert_eq!(read_backlog(&dir), content);
+    }
+
+    // @spec SYNC-PTR-001, SYNC-PTR-003
+    #[test]
+    fn run_pointer_suffix_is_idempotent_across_two_runs() {
+        let dir = setup();
+        write_backlog(&dir, "- [vat-t1h] Title\n  A note.\n");
+        run(dir.path()).unwrap();
+        let after_first = read_backlog(&dir);
+        assert_eq!(after_first, "- [vat-t1h] Title (see ./items/vat-t1h.md)\n");
+        let outcome = run(dir.path()).unwrap();
+        assert_eq!(outcome, SyncOutcome::Skipped, "second run is a no-op");
+        assert_eq!(read_backlog(&dir), after_first, "no second suffix appended");
     }
 
     // ── SYNC-WRITE-002 (skip write when no change) ───────────────────────────
@@ -747,7 +918,10 @@ mod tests {
         write_backlog(&dir, "- [vat-t1h] Title\n  A note.\n");
         run(dir.path()).unwrap();
         let out = read_backlog(&dir);
-        assert_eq!(out, "- [vat-t1h] Title\n", "notes cleared");
+        assert_eq!(
+            out, "- [vat-t1h] Title (see ./items/vat-t1h.md)\n",
+            "notes cleared, pointer suffix added"
+        );
         let item_path = dir.path().join("items").join("vat-t1h.md");
         assert!(item_path.exists(), "item file created");
         assert!(fs::read_to_string(item_path).unwrap().contains("A note."));

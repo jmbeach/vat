@@ -178,7 +178,7 @@ fn golden_new_bullets_get_ids_assigned() {
 
 // ── idempotent re-run: the second sync is a no-op ────────────────────────────
 
-// @spec SYNC-WRITE-001, SYNC-WRITE-002
+// @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-PTR-003
 #[test]
 fn golden_second_sync_is_a_noop() {
     let tmp = prepare("idempotent");
@@ -195,7 +195,7 @@ fn golden_second_sync_is_a_noop() {
 
 // ── notes append to an existing item file ────────────────────────────────────
 
-// @spec SYNC-NOTES-001, SYNC-NOTES-003
+// @spec SYNC-NOTES-001, SYNC-NOTES-003, SYNC-PTR-001
 #[test]
 fn golden_notes_append_to_existing_item_file() {
     check("notes-append", Ids::PreExisting);
@@ -237,11 +237,39 @@ fn golden_dangling_blocked_by_left_alone() {
     check("dangling-blocked-by", Ids::PreExisting);
 }
 
+// ── pointer suffix is appended when an item file exists ──────────────────────
+
+/// A bullet whose id already has an `items/<id>.md` file (and no notes this
+/// run) gains the canonical ` (see ./items/<id>.md)` pointer suffix; the item
+/// file is left untouched (SYNC-PTR-001).
+// @spec SYNC-PTR-001
+#[test]
+fn golden_pointer_suffix_appended_when_item_file_exists() {
+    check("pointer-suffix", Ids::PreExisting);
+}
+
+/// Re-running sync on a bullet that already carries the canonical suffix is a
+/// no-op: the suffix is not doubled (SYNC-PTR-003).
+// @spec SYNC-PTR-003
+#[test]
+fn golden_pointer_suffix_is_idempotent() {
+    let tmp = prepare("pointer-suffix");
+    run_sync(&tmp);
+    let after_first = snapshot(&tmp.path().join("backlog"));
+    run_sync(&tmp);
+    let after_second = snapshot(&tmp.path().join("backlog"));
+    assert_eq!(
+        after_first, after_second,
+        "second sync must not re-append the suffix"
+    );
+    assert_matches_expected(&tmp, "pointer-suffix", Ids::PreExisting);
+}
+
 // ── frontmatter is preserved verbatim while notes are extracted ──────────────
 
 /// Multi-key frontmatter round-trips byte-for-byte; the note moves to a new
 /// item file carrying `id:` frontmatter (SYNC-NOTES-002).
-// @spec SYNC-NOTES-002
+// @spec SYNC-NOTES-002, SYNC-PTR-001
 #[test]
 fn golden_frontmatter_preserved() {
     check("frontmatter-preserved", Ids::PreExisting);
