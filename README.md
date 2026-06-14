@@ -16,7 +16,15 @@ It's low friction, compact, and simple.
 
 ## Install
 
-`vat` is not yet published to crates.io. For v1, install the binary straight from the repo with Cargo:
+Install from crates.io with Cargo. The crate is published as `vat-cli`, and it installs a binary named `vat`:
+
+```sh
+cargo install vat-cli
+```
+
+The bare `vat` name was already taken on crates.io, so the crate is `vat-cli` — but the command you run is still `vat`.
+
+To track unreleased `main` instead, install straight from the repo:
 
 ```sh
 cargo install --git https://github.com/jmbeach/vat
@@ -45,4 +53,10 @@ No-install option: hand an agent the [`vat` skill](./.claude/skills/vat/SKILL.md
 
 At it's core, `vat` is just a markdown file that has single line entries for each task in the backlog. If the information needed to capture the task fully extends past one line, `vat` stores the rest of the information of that item in a file under `backlog/items/<id>.md` You can add tags to a backlog item using square brackets. Ex: `[in-progress]` or `[by:jared]`.
 
-The `vat` skill and (future) cli support claiming tasks, creating them / assigning them ID's, completing them, etc.
+The `vat` skill and cli support claiming tasks, creating them / assigning them ID's, completing them, etc.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](./LICENSE-APACHE) or [MIT license](./LICENSE-MIT) at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

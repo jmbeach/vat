@@ -1,7 +1,21 @@
 [package]
-name = "vat"
+name = "vat-cli"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+description = "Versioned, addressable task backlog as plain markdown — claim, track, and complete tasks from the CLI."
+repository = "https://github.com/jmbeach/vat"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["backlog", "tasks", "cli", "todo", "markdown"]
+categories = ["command-line-utilities", "development-tools"]
+# The published crate is `vat-cli` (the bare `vat` name is taken on crates.io),
+# but the installed binary is still `vat`.
+exclude = [".claude", "docs", "backlog", "CLAUDE.md"]
+
+[[bin]]
+name = "vat"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
