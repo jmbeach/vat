@@ -67,7 +67,7 @@ arrows:
     blockedBy: []
     detail: skill.md
     next: "Audit SKILL-* specs against SKILL.md implementation and flip markers to [x] as verified"
-    drift: "All 32 SKILL-* specs marked [ ] (unverified) — the SKILL.md implementation likely satisfies them but no spec-level audit has been performed"
+    drift: "5 binary-first specs (SKILL-BIN-001..005, vat-46x) marked [x]; the other 32 SKILL-* specs remain [ ] (unverified) — the SKILL.md implementation likely satisfies them but no spec-level audit has been performed"
 
 # Items found during mapping that don't yet belong to a segment.
 unmapped:

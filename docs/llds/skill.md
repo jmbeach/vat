@@ -17,11 +17,23 @@ Two principles govern the skill:
 
 The skill implements every command (`init`, `sync`, `start`, `block`, `unblock`, `done`, `config`) against the same file formats as the binary. That behavior is specified elsewhere and not duplicated here. The skill's own segment (`SKILL-*`) specifies only:
 
+- **Binary-first delegation** — delegate each operation to the installed `vat` binary, with the prose procedures as the fallback (`SKILL-BIN-*`).
 - **Nested-repo detection** — recognizing a self-versioned backlog (`SKILL-DETECT-*`).
 - **The atomic claim loop** — how mutating commands run against a nested-repo backlog (`SKILL-LOOP-*`).
 - **The atomicity guard** — when the loop is safe to run vs when the command falls back to a local edit (`SKILL-GUARD-*`).
 - **Terminal preconditions** — the per-command condition that ends the retry loop (`SKILL-TERM-*`).
 - **The fidelity / file-boundary contract** above (`SKILL-IMPL-*`).
+
+## Binary-first delegation
+
+The skill exists for the zero-install case, but it is not the *preferred* engine when a faster, authoritative one is present. So before performing any requested operation the skill tests whether the `vat` binary is on `PATH` (`command -v vat`):
+
+- **Installed** → the skill **delegates**: it runs the matching `vat <command>` and reports the binary's result. The binary implements the same `FMT-*`/`SYNC-*`/`CMD-*` specs, so the backlog mutation is byte-identical to the prose procedure — the prose § Procedures remain the authoritative description of *what* each command does, while the binary is simply a faster executor of it.
+- **Absent** → the skill follows the prose procedures directly, exactly as before. This is the skill's reason for existing (a remote agent in a fresh container with no `cargo` and no release binary).
+
+This is a substitution of the **local mutation step only**. The binary is git-agnostic (HLD Decision #1): it never fetches, commits, or pushes. So in a nested-repo backlog the skill still owns the entire git story — nested-repo detection, the atomicity guard, the atomic claim loop, the terminal-precondition checks, and the commit/push are all the skill's regardless of which engine performed the edit. Concretely, delegation swaps `vat <command>` in for the prose path at exactly two points: the loop's **mutate** step and the guard's **local-edit-only fallback**. Everything around those points — and the entire ordinary-backlog path, which runs `vat <command>` directly with no git — is unchanged.
+
+The fidelity contract (`SKILL-IMPL-001`) makes this substitution safe: because prose and binary both target the same shared specs, the loop's correctness arguments (first-push-wins, reset-and-re-decide on contention, the no-op short-circuit) hold identically no matter which produced the bytes.
 
 ## Detecting a nested-repo backlog
 

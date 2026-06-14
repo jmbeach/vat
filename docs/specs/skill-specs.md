@@ -1,10 +1,18 @@
 # EARS Specs: The `vat` skill
 
-Requirements for what is specific to the `vat` skill as an implementation: the fidelity contract, nested-repo detection, the atomicity guard, the atomic claim loop, and per-command terminal preconditions. See [skill LLD](../llds/skill.md). The command and format behavior the skill shares with the binary is specified in the `FMT-*`, `SYNC-*`, and `CMD-*` segments, not here.
+Requirements for what is specific to the `vat` skill as an implementation: binary-first delegation, the fidelity contract, nested-repo detection, the atomicity guard, the atomic claim loop, and per-command terminal preconditions. See [skill LLD](../llds/skill.md). The command and format behavior the skill shares with the binary is specified in the `FMT-*`, `SYNC-*`, and `CMD-*` segments, not here.
 
 Throughout: a **nested-repo backlog** is one where `backlog/.git` exists (the backlog is its own git repository); otherwise the backlog is tracked by the outer project repo. The binary is unaware of the distinction and never runs git; only the skill detects it and runs the atomic claim loop. A **mutating command** is any command that writes a file under `backlog/`: `sync`, `start`, `block`, `unblock`, `done`, `config set project.id`. Of these, the **claim-loop commands** — `sync`, `start`, `block`, `unblock`, `done` — run the full atomic claim loop; `config set project.id` is excluded from the loop (concurrent re-prefixing is out of scope) and instead commits and pushes once (see § `config set project.id`).
 
 Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
+
+## Binary-first delegation
+
+- [x] **SKILL-BIN-001** — Before performing a requested operation, the skill shall test whether the `vat` binary is available on `PATH` (e.g. via `command -v vat`); when it is available the skill shall delegate the operation to the binary, and when it is not available the skill shall execute the corresponding prose procedure.
+- [x] **SKILL-BIN-002** — When the `vat` binary is available, the skill shall delegate by running exactly one binary invocation per requested operation (`vat sync`, `vat start <id>`, `vat block <id> <blocker-id>`, `vat unblock <id>`, `vat done <id>`, `vat init [<prefix>]`, `vat config get <key>`, `vat config set <key> <value>`) and shall report the binary's result (its stdout/stderr, surfacing a non-zero exit as the error).
+- [x] **SKILL-BIN-003** — For any requested operation and backlog state, the file state produced by delegating to the binary shall be byte-identical to the file state the skill's prose procedure would produce (both implement the same `FMT-*`/`SYNC-*`/`CMD-*` specs).
+- [x] **SKILL-BIN-004** — While the backlog is a nested repo and the `vat` binary is available, the skill shall still perform nested-repo detection, the atomicity guard, the atomic claim loop, and the terminal-precondition checks itself, substituting `vat <command>` for every local file-mutation step (the loop's mutate step and the guard's local-edit-only fallback); the binary shall never run `git`.
+- [x] **SKILL-BIN-005** — When the `vat` binary is not available, the skill shall behave exactly as specified by the prose procedures and the other `SKILL-*` specs, with no change to file or git behavior.
 
 ## Fidelity and file boundary
 

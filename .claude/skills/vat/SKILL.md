@@ -1,13 +1,13 @@
 ---
 name: vat
-description: Manage a VAT backlog — assign IDs to new bullets (sync), claim tasks (start), block/unblock, mark done, and read/write project & user config. Use whenever the user says "vat sync", "claim foo-7k2", "mark X done", "ID that bullet", "extract notes", or otherwise asks for any operation on `backlog/backlog.md`, `backlog/items/`, `backlog/vat.toml`, `backlog/.used-ids`, or `~/.config/vat/config.toml`. First-class zero-install implementation — drop this skill into any project to operate a VAT backlog with no binary; when the backlog is its own git repo it claims tasks atomically against the shared remote.
+description: Manage a VAT backlog — assign IDs to new bullets (sync), claim tasks (start), block/unblock, mark done, and read/write project & user config. Use whenever the user says "vat sync", "claim foo-7k2", "mark X done", "ID that bullet", "extract notes", or otherwise asks for any operation on `backlog/backlog.md`, `backlog/items/`, `backlog/vat.toml`, `backlog/.used-ids`, or `~/.config/vat/config.toml`. First-class implementation — delegates to the installed `vat` binary when present, and otherwise operates the backlog zero-install with only file edits and git; when the backlog is its own git repo it claims tasks atomically against the shared remote.
 argument-hint: <subcommand> [args...]
 allowed-tools: Read, Write, Edit, Bash
 ---
 
 # VAT skill
 
-VAT (Versioned Addressable Tasks) is a tiny per-project backlog tool. State is plain markdown in the repo. This skill is a first-class implementation — it performs the same operations as the Rust binary, and unlike the binary it needs no install, so a remote agent can operate a backlog with only file edits and `git`. When the backlog is its own git repository, the skill claims tasks atomically against the shared remote (see [§ Nested-repo backlogs](#nested-repo-backlogs-atomic-claim-loop)).
+VAT (Versioned Addressable Tasks) is a tiny per-project backlog tool. State is plain markdown in the repo. This skill is a first-class implementation — it performs the same operations as the Rust binary, and unlike the binary it needs no install, so a remote agent can operate a backlog with only file edits and `git`. **When the `vat` binary is installed, the skill delegates each operation to it** rather than editing files by hand; the prose procedures below are the fallback for when the binary is absent (see [§ Binary-first delegation](#binary-first-delegation)). When the backlog is its own git repository, the skill claims tasks atomically against the shared remote (see [§ Nested-repo backlogs](#nested-repo-backlogs-atomic-claim-loop)) — and it owns that git loop whether the mutation came from the binary or the prose path, because the binary is git-agnostic.
 
 ## Invocation
 
@@ -44,6 +44,39 @@ Nothing outside this set is ever written.
 - `vat config get|set <key> [<value>]`
 
 If the user hand-edited `backlog/backlog.md` and asks you to "tidy" or "commit" it, run `sync` first.
+
+## Binary-first delegation
+
+VAT ships as both a Rust binary and this prose skill (HLD § Implementations). When the `vat` binary is installed it is the authoritative mutation engine, so the skill **delegates to it** instead of editing files by hand. The prose § Procedures are the fallback for when the binary is absent — a fresh remote container with no `cargo` and no release binary, which is the skill's reason for existing.
+
+**Decision — evaluate once, before performing any requested operation.** Test whether the binary is on `PATH`:
+
+```
+command -v vat
+```
+
+- **Found** → **delegate**: perform the operation by running the matching `vat <command>` (table below) and report the binary's result — its stdout/stderr, with a non-zero exit surfaced as the error. Because the binary implements the same `FMT-*`/`SYNC-*`/`CMD-*` specs, the resulting backlog mutation is byte-for-byte equivalent to the prose procedure.
+- **Not found** → **fall back**: execute the prose procedure for the command exactly as written below. This is the skill's prior behavior, unchanged.
+
+**Command mapping.** The requested operation maps to exactly one binary invocation:
+
+| Requested operation | Binary invocation |
+|---|---|
+| `sync` | `vat sync` |
+| `start <id>` | `vat start <id>` |
+| `block <id> <blocker-id>` | `vat block <id> <blocker-id>` |
+| `unblock <id>` | `vat unblock <id>` |
+| `done <id>` | `vat done <id>` |
+| `init [<prefix>]` | `vat init [<prefix>]` |
+| `config get <key>` | `vat config get <key>` |
+| `config set <key> <value>` | `vat config set <key> <value>` |
+
+**Nested-repo backlogs: the skill still owns git.** The binary is git-agnostic — it mutates the markdown and never fetches, commits, or pushes (HLD Decision #1). So delegation replaces **only the local file-mutation step**; nested-repo detection (§ Nested-repo backlogs), the atomicity guard, the atomic claim loop, the terminal-precondition checks, and the commit/push are still the skill's, exactly as for the prose path. Concretely:
+
+- **Ordinary backlog** (no `backlog/.git`) → run `vat <command>` directly; no git.
+- **Nested-repo backlog** (`backlog/.git` present) → run the claim loop unchanged, but wherever the prose path would mutate files locally — the loop's **mutate** step, and the guard's **local-edit-only fallback** — run `vat <command>` instead. The skill still evaluates terminal preconditions and drives `fetch`/`reset`/`commit`/`push`; the binary never runs git.
+
+Everything downstream of this decision — the file boundary, exit-code semantics, and output wording — is identical whether the mutation came from the binary or from the prose path.
 
 ## File formats
 
@@ -165,7 +198,7 @@ VAT's state is plain markdown, so normally you just edit files and leave git to 
 
 **Detection.** Before running any *mutating* command (`sync`, `start`, `block`, `unblock`, `done`, `config set project.id`), test for `backlog/.git`:
 
-- **Absent** → ordinary backlog. Edit files in place and run no git (everything in § Procedures, unchanged).
+- **Absent** → ordinary backlog. Apply the change in place and run no git — by running `vat <command>` when the binary is installed (§ Binary-first delegation), otherwise via the prose § Procedures, unchanged.
 - **Present** (a directory, or a *file* in the submodule/worktree case) → nested-repo backlog. Run the command through the machinery below. **All `git` runs from inside `backlog/`** (`git -C backlog ...`).
 
 Non-mutating commands (`config get`, and `init`, which runs before `backlog/` exists) never run git, regardless. The **claim-loop commands** are `sync`, `start`, `block`, `unblock`, `done`; `config set project.id` is handled separately (single push — end of this section).
@@ -181,7 +214,7 @@ git merge-base --is-ancestor HEAD @{u}  # exit 0 → HEAD is an ancestor of upst
 ```
 
 - **Clean AND synced** (no porcelain output AND `merge-base` exit 0) → run the loop. **Reuse this `fetch`** as the loop's first refresh — don't fetch twice.
-- **Dirty OR ahead** (porcelain output, or `merge-base` exit 1 = local commits the remote lacks) → **local-edit-only fallback**: make the change on disk exactly as for an ordinary backlog, do **no** commit/reset/push, and say so — e.g. `started foo-7k2 (not pushed; backlog/ has uncommitted changes)` or `... (not pushed; backlog/ has unpushed local commits)`. Never touch inherited in-flight work; the user syncs that batch themselves.
+- **Dirty OR ahead** (porcelain output, or `merge-base` exit 1 = local commits the remote lacks) → **local-edit-only fallback**: make the change on disk exactly as for an ordinary backlog (running `vat <command>` when the binary is installed, otherwise the prose procedure), do **no** commit/reset/push, and say so — e.g. `started foo-7k2 (not pushed; backlog/ has uncommitted changes)` or `... (not pushed; backlog/ has unpushed local commits)`. Never touch inherited in-flight work; the user syncs that batch themselves.
 - **`@{u}` does not resolve** (no upstream configured, or detached HEAD) → **fail fast** with the raw git error; mutate nothing. A nested-repo backlog with no wired remote is a misconfiguration to surface, not to treat as ordinary.
 - **`git fetch` fails** (unreachable remote, auth) → **fail fast** with the raw git error; mutate nothing.
 
@@ -201,7 +234,10 @@ loop:
         loss    → report the loss, stop
         none    → continue
   4. decide + mutate:  run the command's § Procedure against the fresh state
-                       (its normal local validation still applies — e.g. unknown id aborts)
+                       — or, when the `vat` binary is installed, run the matching
+                       `vat <command>` instead (§ Binary-first delegation); the binary
+                       makes the same edit and runs no git
+                       (normal local validation still applies — e.g. unknown id aborts)
   5. no-op check:  if the tree is now byte-identical to fresh state → report `unchanged`, stop
   6. commit:   git add -A && git commit -m "<fixed message>"
   7. push:     git push
@@ -243,9 +279,11 @@ There is no "already mine, success" case for `start`: a rejected claim is reset 
 
 ### `config set project.id` (single push, no loop)
 
-Concurrent re-prefixing isn't a real scenario, and re-deciding a re-prefix against a winner's fresh state would be destructive — so this command does **not** loop. With the guard satisfied: edit `vat.toml` → `git commit -m "vat config set project.id <v>"` → `git push`, **once**. No refresh, no reset, no re-decide. A rejected or failed push fails fast with the raw git error (exit 1); the user pulls and re-runs. If `project.id` already equals `<v>`, succeed without writing, committing, or pushing. (Dirty-or-ahead still falls back to local-edit-only, like any mutating command.)
+Concurrent re-prefixing isn't a real scenario, and re-deciding a re-prefix against a winner's fresh state would be destructive — so this command does **not** loop. With the guard satisfied: edit `vat.toml` (by running `vat config set project.id <v>` when the binary is installed, otherwise the prose procedure) → `git commit -m "vat config set project.id <v>"` → `git push`, **once**. No refresh, no reset, no re-decide. A rejected or failed push fails fast with the raw git error (exit 1); the user pulls and re-runs. If `project.id` already equals `<v>`, succeed without writing, committing, or pushing. (Dirty-or-ahead still falls back to local-edit-only, like any mutating command.)
 
 ## Procedures
+
+These prose procedures are the **fallback path**: follow them directly when the `vat` binary is not installed (§ Binary-first delegation). When the binary *is* installed, you run `vat <command>` instead of the steps below — but the binary produces the same file state, so these procedures remain the authoritative description of what each command does.
 
 ### `vat sync`
 
