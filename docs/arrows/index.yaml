@@ -1,5 +1,5 @@
 schema_version: 1
-last_updated: 2026-06-12
+last_updated: 2026-06-14
 
 # Taxonomy groups segments by domain cluster.
 taxonomy:
@@ -9,14 +9,16 @@ taxonomy:
     - sync
     - commands
     - cli
+  implementation-layer:
+    - skill
 
 # The graph of segments.
 arrows:
   backlog-format:
-    status: COMPLETE
+    status: OK
     sampled: 2026-06-09
-    audited: 2026-06-12
-    audited_sha: 03b355d
+    audited: 2026-06-14
+    audited_sha: ee8b0e6
     blocks: [sync, commands]
     blockedBy: []
     detail: backlog-format.md
@@ -26,35 +28,46 @@ arrows:
   sync:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-12
-    audited_sha: 03b355d
+    audited: 2026-06-14
+    audited_sha: ee8b0e6
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
-    next: "Implement item-file pointer suffixes (SYNC-PTR-001 to 003) — the segment's last active gap (marker normalization + write guarantees landed via vat-v3k)"
+    next: "Implement item-file pointer suffixes (SYNC-PTR-001 to 003) — the segment's last active gap"
     drift: null
 
   commands:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-12
-    audited_sha: 9dbd445
+    audited: 2026-06-14
+    audited_sha: ee8b0e6
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
-    next: "Implement block and unblock using the existing find_entry_index helper. Thread classify_exit_code through cmd_init/cmd_sync for CMD-EXIT-003."
-    drift: "classify_exit_code() wired through cmd_config/cmd_start/cmd_done but not cmd_init or cmd_sync, which still exit 1 for all errors. CMD-EXIT-003 ([x]) requires every command to route through classification."
+    next: "Thread classify_exit_code through cmd_init and cmd_sync so CMD-EXIT-003 applies to every command."
+    drift: "classify_exit_code() wired through cmd_config/cmd_start/cmd_block/cmd_unblock/cmd_done but not cmd_init or cmd_sync, which still exit 1 for all errors. CMD-EXIT-003 (marked [x] in spec) requires every command to route through classification."
 
   cli:
     status: MAPPED
     sampled: 2026-06-09
-    audited: 2026-06-12
-    audited_sha: 9dbd445
+    audited: 2026-06-14
+    audited_sha: ee8b0e6
     blocks: []
     blockedBy: []
     detail: cli.md
     next: "Create docs/specs/cli-specs.md to formalize CLI behavioral requirements (argument parsing, error rendering, exit codes)"
     drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
+
+  skill:
+    status: MAPPED
+    sampled: 2026-06-14
+    audited: 2026-06-14
+    audited_sha: ee8b0e6
+    blocks: []
+    blockedBy: []
+    detail: skill.md
+    next: "Audit SKILL-* specs against SKILL.md implementation and flip markers to [x] as verified"
+    drift: "All 32 SKILL-* specs marked [ ] (unverified) — the SKILL.md implementation likely satisfies them but no spec-level audit has been performed"
 
 # Items found during mapping that don't yet belong to a segment.
 unmapped:

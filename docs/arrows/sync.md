@@ -4,7 +4,7 @@
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-12 (vat-v3k, on top of `03b355d`). Notes extraction (vat-t1h), ID assignment (vat-s9g), and marker normalization + write/idempotence guarantees (vat-v3k) are implemented; `sync.rs` is wired onto `src/bullet.rs` (`Bullet::parse`/`serialize`). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
+**PARTIAL** — last audited 2026-06-14 (HEAD `ee8b0e6`; previously `03b355d`). Notes extraction (vat-t1h), ID assignment (vat-s9g), and marker normalization + write/idempotence guarantees (vat-v3k) are implemented; `sync.rs` is wired onto `src/bullet.rs` (`Bullet::parse`/`serialize`). The only remaining gap is the item-file pointer suffix (SYNC-PTR-001..003).
 
 ## References
 

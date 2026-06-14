@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — last audited 2026-06-12 (git SHA `9dbd445`); black-box CLI tests added 2026-06-13 (vat-g4w). Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. Exit codes 0, 1, and 2 are now wired via `classify_exit_code()` in `src/main.rs` (for cmd_config operations). The CLI shell is now covered end-to-end by `tests/e2e_lifecycle.rs`, which spawns the real binary through the documented `init` → `sync` → `start` → `done` lifecycle.
+**MAPPED** — last audited 2026-06-14 (HEAD `ee8b0e6`). Shell completions wired (vat-f7v): hidden `Completions` subcommand in `src/main.rs`, implemented by `src/cmd_completions.rs`. Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. `classify_exit_code()` is now wired for all commands except `cmd_init` and `cmd_sync`. The CLI shell is covered end-to-end by `tests/e2e_lifecycle.rs`.
 
 ## References
 
