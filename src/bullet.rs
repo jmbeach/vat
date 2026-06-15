@@ -31,6 +31,7 @@ impl Bullet {
     /// The task name with the ` (see ./items/<id>.md)` pointer suffix stripped,
     /// if present. Use this for display, search, or export so the file-decoration
     /// stored in `title` does not leak into task-name contexts.
+    #[allow(dead_code)]
     pub(crate) fn bare_title(&self) -> &str {
         if let Some(id) = &self.id {
             let suffix = format!(" (see ./items/{id}.md)");

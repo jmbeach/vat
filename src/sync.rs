@@ -363,9 +363,10 @@ fn apply_pointer_suffix(
     existing_ids: &HashSet<OsString>,
     extracting_notes: bool,
 ) {
-    let Some(id) = bullet.id.as_deref() else { return };
-    let item_exists =
-        extracting_notes || existing_ids.contains(OsStr::new(&format!("{id}.md")));
+    let Some(id) = bullet.id.as_deref() else {
+        return;
+    };
+    let item_exists = extracting_notes || existing_ids.contains(OsStr::new(&format!("{id}.md")));
     if !item_exists {
         return;
     }
@@ -640,7 +641,11 @@ mod tests {
         let dir = setup();
         let items_dir = dir.path().join("items");
         fs::create_dir_all(&items_dir).unwrap();
-        fs::write(items_dir.join("vat-t1h.md"), "---\nid: vat-t1h\n---\n\nOld.\n").unwrap();
+        fs::write(
+            items_dir.join("vat-t1h.md"),
+            "---\nid: vat-t1h\n---\n\nOld.\n",
+        )
+        .unwrap();
         // Whitespace-only notes don't create a new file, but the pre-existing
         // file means SYNC-PTR-001 should still add the suffix.
         write_backlog(&dir, "- [vat-t1h] Title\n   \n");
