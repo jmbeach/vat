@@ -8,7 +8,7 @@ use crate::backlog_file::{BacklogFile, ParsedRegion, check_version};
 use crate::bullet::Bullet;
 use crate::cmd_start::{EntryLookup, find_entry_index};
 use crate::errors::UserError;
-use crate::{file_io, tombstone};
+use crate::{file_io, item_file, tombstone};
 
 /// Complete the task `id`: remove its bullet from `backlog.md`, delete its item
 /// file, tombstone the id, and auto-unblock any dependents. Returns the
@@ -52,7 +52,8 @@ pub(crate) fn run(id: &str, backlog_dir: &Path) -> anyhow::Result<String> {
     // directly and treat NotFound as success rather than guarding with
     // `exists()` first — `done` doesn't require an item file to exist, and the
     // single syscall has no TOCTOU window between a check and the removal.
-    let item_path = backlog_dir.join("items").join(format!("{id_lower}.md"));
+    let items_dir = backlog_dir.join("items");
+    let item_path = item_file::item_path(&items_dir, &id_lower);
     match std::fs::remove_file(&item_path) {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
