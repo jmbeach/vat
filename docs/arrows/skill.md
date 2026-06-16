@@ -4,7 +4,7 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 
 ## Status
 
-**MAPPED** — first mapped 2026-06-14 (HEAD `ee8b0e6`). LLD (`docs/llds/skill.md`) and EARS spec (`docs/specs/skill-specs.md`) exist. The 5 binary-first specs (`SKILL-BIN-001..005`, added with vat-46x) are `[x]` — written in lockstep with the SKILL.md § Binary-first delegation implementation and verified coherent. The other 32 SKILL-* specs remain `[ ]` (not yet audited against the SKILL.md implementation); the SKILL.md implementation almost certainly satisfies them — they were specified after the skill was written — but an audit pass is needed to flip those markers.
+**MAPPED** — first mapped 2026-06-14 (HEAD `ee8b0e6`). LLD (`docs/llds/skill.md`) and EARS spec (`docs/specs/skill-specs.md`) exist. The 5 binary-first specs (`SKILL-BIN-001..005`, added with vat-46x) are `[x]` — written in lockstep with the SKILL.md § Binary-first delegation implementation and verified coherent. `SKILL-IMPL-001` is also `[x]`: it makes the same byte-identical-state claim as `SKILL-BIN-003` and is covered by the same logical argument. The other 31 SKILL-* specs remain `[ ]` (not yet audited against the SKILL.md implementation); the SKILL.md implementation almost certainly satisfies them — they were specified after the skill was written — but an audit pass is needed to flip those markers.
 
 ## References
 
@@ -15,7 +15,7 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 - docs/llds/skill.md
 
 ### EARS
-- docs/specs/skill-specs.md (37 active specs: 5 verified; 32 unverified; 0 deferred)
+- docs/specs/skill-specs.md (37 active specs: 6 verified; 31 unverified; 0 deferred)
 
 ### Tests
 - .claude/skills/vat/evals/evals.json (scenario evals covering SKILL-* behaviors, run with the skill-creator harness)
@@ -37,18 +37,18 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 | Category | Spec IDs | Implemented | Deferred | Gaps |
 |----------|----------|-------------|----------|------|
 | Binary-first delegation | SKILL-BIN-001 to 005 | 5 | 0 | 0 |
-| Fidelity and file boundary | SKILL-IMPL-001 to 002 | 0 | 0 | 2 |
+| Fidelity and file boundary | SKILL-IMPL-001 to 002 | 1 | 0 | 1 |
 | Nested-repo detection | SKILL-DETECT-001 to 004 | 0 | 0 | 4 |
 | Atomicity guard | SKILL-GUARD-001 to 005 | 0 | 0 | 5 |
 | Atomic claim loop | SKILL-LOOP-001 to 010 | 0 | 0 | 10 |
 | Terminal preconditions | SKILL-TERM-001 to 008 | 0 | 0 | 8 |
 | `config set project.id` (single push) | SKILL-CFG-001 to 003 | 0 | 0 | 3 |
 
-**Summary:** 5 of 37 specs verified; 0 deferred; 32 unverified. The 5 verified are the binary-first specs (`SKILL-BIN-*`), written and verified with vat-46x. The 32 unverified gaps reflect lack of audit, not lack of implementation — the SKILL.md likely implements all of these. An audit pass should flip all or nearly all of those markers to `[x]`.
+**Summary:** 6 of 37 specs verified; 0 deferred; 31 unverified. The 6 verified are the binary-first specs (`SKILL-BIN-001..005`) plus `SKILL-IMPL-001` (covered by `SKILL-BIN-003`). The 31 unverified gaps reflect lack of audit, not lack of implementation — the SKILL.md likely implements all of these. An audit pass should flip all or nearly all of those markers to `[x]`.
 
 ## Key Findings
 
-0. **Binary-first delegation** (vat-46x) — The skill checks `command -v vat` before every operation. When the binary is installed it delegates (`vat <command>`) and reports the result; when absent it follows the prose procedures (its zero-install reason for existing). Delegation substitutes only the local file-mutation step — in a nested-repo backlog the skill still owns detection, the atomicity guard, the claim loop, terminal preconditions, and commit/push, because the binary is git-agnostic. Fidelity (`SKILL-IMPL-001`) makes the substitution safe: prose and binary produce byte-identical state. Specs `SKILL-BIN-001..005`.
+0. **Binary-first delegation** (vat-46x) — The skill checks `command -v vat` once, before performing any requested operation. When the binary is installed it delegates (`vat <command>`) and reports the result; when absent it follows the prose procedures (its zero-install reason for existing). Delegation substitutes only the local file-mutation step — in a nested-repo backlog the skill still owns detection, the atomicity guard, the claim loop, terminal preconditions, and commit/push, because the binary is git-agnostic. Fidelity (`SKILL-BIN-003`) makes the substitution safe: prose and binary produce byte-identical state. Specs `SKILL-BIN-001..005`.
 
 1. **First-class implementation** — The skill is a permanent first-class implementation alongside the Rust binary (HLD § Implementations). It is not a stopgap. Its reason for existing is zero-install operation for remote coding agents who cannot run `cargo` or find a prebuilt binary in a fresh container.
 
@@ -56,9 +56,9 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 
 3. **Atomicity guard** — The `reset --hard` in the loop is destructive, so the skill evaluates the guard at entry: `backlog/` working tree must be clean AND `HEAD` must be an ancestor of `@{u}` (after a `git fetch`). If dirty or ahead, the skill falls back to a local edit only and reports the deferral. This prevents the loop from destroying uncommitted or unpushed work inherited from the user.
 
-4. **All SKILL-* specs unverified** — The LLD and EARS spec were added alongside the final packaging work (ee8b0e6). Spec markers remain `[ ]` pending a dedicated audit pass tracing each SKILL-* requirement through the SKILL.md prose implementation.
+4. **Most SKILL-* specs unverified** — The LLD and EARS spec were added alongside the final packaging work (ee8b0e6). 31 spec markers remain `[ ]` pending a dedicated audit pass tracing each SKILL-* requirement through the SKILL.md prose implementation. `SKILL-IMPL-001` has been flipped to `[x]`: it is covered by the same logical argument as `SKILL-BIN-003`.
 
 ## Work Required
 
 ### Must Fix
-1. Audit all 32 SKILL-* specs against `.claude/skills/vat/SKILL.md` and flip markers to `[x]` as verified. Suggested order: SKILL-IMPL first (establishes fidelity contract), then SKILL-DETECT (detection logic), SKILL-GUARD (precondition), SKILL-LOOP (the loop body), SKILL-TERM (per-command terminal conditions), SKILL-CFG (single-push path).
+1. Audit all 31 remaining unverified SKILL-* specs against `.claude/skills/vat/SKILL.md` and flip markers to `[x]` as verified. Suggested order: SKILL-IMPL-002 (file boundary), then SKILL-DETECT (detection logic), SKILL-GUARD (precondition), SKILL-LOOP (the loop body), SKILL-TERM (per-command terminal conditions), SKILL-CFG (single-push path).

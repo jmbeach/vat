@@ -16,7 +16,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Fidelity and file boundary
 
-- [ ] **SKILL-IMPL-001** — The skill shall implement the same EARS specs (`FMT-*`, `SYNC-*`, `CMD-*`) as the Rust binary; for any input it processes without running the atomic claim loop, the skill shall produce file state byte-identical to the binary's.
+- [x] **SKILL-IMPL-001** — The skill shall implement the same EARS specs (`FMT-*`, `SYNC-*`, `CMD-*`) as the Rust binary; for any input it processes without running the atomic claim loop, the skill shall produce file state byte-identical to the binary's.
 - [ ] **SKILL-IMPL-002** — The skill shall write only to the VAT-owned file set (`backlog/backlog.md`, `backlog/items/<id>.md`, `backlog/.used-ids`, `backlog/vat.toml`, `backlog/README.md` at init, and the user config file), and shall run `git` only from inside `backlog/`.
 
 ## Nested-repo detection

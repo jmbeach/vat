@@ -198,7 +198,7 @@ VAT's state is plain markdown, so normally you just edit files and leave git to 
 
 **Detection.** Before running any *mutating* command (`sync`, `start`, `block`, `unblock`, `done`, `config set project.id`), test for `backlog/.git`:
 
-- **Absent** → ordinary backlog. Apply the change in place and run no git — by running `vat <command>` when the binary is installed (§ Binary-first delegation), otherwise via the prose § Procedures, unchanged.
+- **Absent** → ordinary backlog. Apply the change in place using the binary if installed (§ Binary-first delegation), and run no git.
 - **Present** (a directory, or a *file* in the submodule/worktree case) → nested-repo backlog. Run the command through the machinery below. **All `git` runs from inside `backlog/`** (`git -C backlog ...`).
 
 Non-mutating commands (`config get`, and `init`, which runs before `backlog/` exists) never run git, regardless. The **claim-loop commands** are `sync`, `start`, `block`, `unblock`, `done`; `config set project.id` is handled separately (single push — end of this section).
@@ -214,7 +214,7 @@ git merge-base --is-ancestor HEAD @{u}  # exit 0 → HEAD is an ancestor of upst
 ```
 
 - **Clean AND synced** (no porcelain output AND `merge-base` exit 0) → run the loop. **Reuse this `fetch`** as the loop's first refresh — don't fetch twice.
-- **Dirty OR ahead** (porcelain output, or `merge-base` exit 1 = local commits the remote lacks) → **local-edit-only fallback**: make the change on disk exactly as for an ordinary backlog (running `vat <command>` when the binary is installed, otherwise the prose procedure), do **no** commit/reset/push, and say so — e.g. `started foo-7k2 (not pushed; backlog/ has uncommitted changes)` or `... (not pushed; backlog/ has unpushed local commits)`. Never touch inherited in-flight work; the user syncs that batch themselves.
+- **Dirty OR ahead** (porcelain output, or `merge-base` exit 1 = local commits the remote lacks) → **local-edit-only fallback**: make the change on disk exactly as for an ordinary backlog (§ Binary-first delegation), do **no** commit/reset/push, and say so — e.g. `started foo-7k2 (not pushed; backlog/ has uncommitted changes)` or `... (not pushed; backlog/ has unpushed local commits)`. Never touch inherited in-flight work; the user syncs that batch themselves.
 - **`@{u}` does not resolve** (no upstream configured, or detached HEAD) → **fail fast** with the raw git error; mutate nothing. A nested-repo backlog with no wired remote is a misconfiguration to surface, not to treat as ordinary.
 - **`git fetch` fails** (unreachable remote, auth) → **fail fast** with the raw git error; mutate nothing.
 
@@ -233,11 +233,12 @@ loop:
         success → report success, stop (no mutation, no push)
         loss    → report the loss, stop
         none    → continue
-  4. decide + mutate:  run the command's § Procedure against the fresh state
-                       — or, when the `vat` binary is installed, run the matching
-                       `vat <command>` instead (§ Binary-first delegation); the binary
-                       makes the same edit and runs no git
-                       (normal local validation still applies — e.g. unknown id aborts)
+  4. decide + mutate:  run the command's § Procedure against the fresh state,
+                       using the binary if it was found at the top of this operation
+                       (§ Binary-first delegation); if the binary exits non-zero →
+                       surface its stdout/stderr as the error, stop (no commit,
+                       no push, no retry)
+                       (normal local validation still applies — e.g. unknown id aborts this way)
   5. no-op check:  if the tree is now byte-identical to fresh state → report `unchanged`, stop
   6. commit:   git add -A && git commit -m "<fixed message>"
   7. push:     git push
