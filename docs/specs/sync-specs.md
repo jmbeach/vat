@@ -30,9 +30,9 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Item-file pointer suffix
 
-- [ ] **SYNC-PTR-001** — When `vat sync` finishes processing a bullet whose id has a corresponding `backlog/items/<id>.md` file, the system shall ensure the bullet's title ends with the literal suffix ` (see ./items/<id>.md)` (single leading space, path relative to `backlog/`), appending it if not already present.
-- [ ] **SYNC-PTR-002** — When `vat sync` finishes processing a bullet whose id has no corresponding `backlog/items/<id>.md` file, the system shall not add the pointer suffix and shall not remove an existing one.
-- [ ] **SYNC-PTR-003** — When the bullet's title already ends with the canonical ` (see ./items/<id>.md)` suffix and the item file exists, `vat sync` shall leave the suffix unchanged (idempotent).
+- [x] **SYNC-PTR-001** — When `vat sync` finishes processing a bullet whose id has a corresponding `backlog/items/<id>.md` file, the system shall ensure the bullet's title ends with the literal suffix ` (see ./items/<id>.md)` (single leading space, path relative to `backlog/`), appending it if not already present.
+- [x] **SYNC-PTR-002** — When `vat sync` finishes processing a bullet whose id has no corresponding `backlog/items/<id>.md` file, the system shall not add the pointer suffix and shall not remove an existing one.
+- [x] **SYNC-PTR-003** — When the bullet's title already ends with the canonical ` (see ./items/<id>.md)` suffix and the item file exists, `vat sync` shall leave the suffix unchanged (idempotent).
 
 ## Idempotence and writes
 

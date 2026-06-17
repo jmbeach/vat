@@ -28,6 +28,20 @@ impl Bullet {
         Self::parse_inner(bullet_line).map(|(bullet, _dropped)| bullet)
     }
 
+    /// The task name with the ` (see ./items/<id>.md)` pointer suffix stripped,
+    /// if present. Use this for display, search, or export so the file-decoration
+    /// stored in `title` does not leak into task-name contexts.
+    #[allow(dead_code)]
+    pub(crate) fn bare_title(&self) -> &str {
+        if let Some(id) = &self.id {
+            let suffix = format!(" (see ./items/{id}.md)");
+            if let Some(s) = self.title.strip_suffix(suffix.as_str()) {
+                return s;
+            }
+        }
+        &self.title
+    }
+
     /// Like [`Bullet::parse`], but also returns the target IDs of every
     /// `[blocked-by:...]` marker that was *discarded* because only the first is
     /// kept (FMT-MARK-007). The list is empty in the common single-blocker
@@ -736,5 +750,47 @@ mod tests {
     fn serialize_title_only() {
         let bullet = b(None, false, None, None, "some task");
         assert_eq!(bullet.serialize(), "- some task\n");
+    }
+
+    // ===================================================================
+    // bare_title — strips pointer suffix from title
+    // ===================================================================
+
+    #[test]
+    fn bare_title_strips_pointer_suffix_when_present() {
+        let bullet = b(
+            Some("vat-g5y"),
+            false,
+            None,
+            None,
+            "My task (see ./items/vat-g5y.md)",
+        );
+        assert_eq!(bullet.bare_title(), "My task");
+    }
+
+    #[test]
+    fn bare_title_returns_title_unchanged_when_no_suffix() {
+        let bullet = b(Some("vat-g5y"), false, None, None, "My task");
+        assert_eq!(bullet.bare_title(), "My task");
+    }
+
+    #[test]
+    fn bare_title_returns_title_unchanged_when_no_id() {
+        let bullet = b(None, false, None, None, "My task (see ./items/vat-g5y.md)");
+        // No id → suffix stripping is not attempted; decoration passes through.
+        assert_eq!(bullet.bare_title(), "My task (see ./items/vat-g5y.md)");
+    }
+
+    #[test]
+    fn bare_title_does_not_strip_wrong_id_suffix() {
+        let bullet = b(
+            Some("vat-abc"),
+            false,
+            None,
+            None,
+            "My task (see ./items/vat-g5y.md)",
+        );
+        // Suffix contains a different id — must not be stripped.
+        assert_eq!(bullet.bare_title(), "My task (see ./items/vat-g5y.md)");
     }
 }
