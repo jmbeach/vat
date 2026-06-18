@@ -33,6 +33,14 @@ fn io_err(path: &Path, source: io::Error) -> ItemFileError {
     }
 }
 
+/// Canonical path for an item file: `<items_dir>/<id>.md`.
+///
+/// Single source of truth for the naming convention — any future extension
+/// change (e.g. subdirectory, different suffix) requires editing only here.
+pub(crate) fn item_path(items_dir: &Path, id: &str) -> PathBuf {
+    items_dir.join(format!("{id}.md"))
+}
+
 #[derive(Debug)]
 pub(crate) struct ItemFile {
     id: String,
