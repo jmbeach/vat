@@ -1,5 +1,5 @@
 schema_version: 1
-last_updated: 2026-06-14
+last_updated: 2026-06-19
 
 # Taxonomy groups segments by domain cluster.
 taxonomy:
@@ -17,8 +17,8 @@ arrows:
   backlog-format:
     status: OK
     sampled: 2026-06-09
-    audited: 2026-06-14
-    audited_sha: ee8b0e6
+    audited: 2026-06-19
+    audited_sha: fe7825c
     blocks: [sync, commands]
     blockedBy: []
     detail: backlog-format.md
@@ -26,21 +26,21 @@ arrows:
     drift: null
 
   sync:
-    status: PARTIAL
+    status: OK
     sampled: 2026-06-09
-    audited: 2026-06-14
-    audited_sha: ee8b0e6
+    audited: 2026-06-19
+    audited_sha: fe7825c
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
-    next: "Implement item-file pointer suffixes (SYNC-PTR-001 to 003) — the segment's last active gap"
+    next: null
     drift: null
 
   commands:
     status: PARTIAL
     sampled: 2026-06-09
-    audited: 2026-06-14
-    audited_sha: ee8b0e6
+    audited: 2026-06-19
+    audited_sha: fe7825c
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
@@ -50,8 +50,8 @@ arrows:
   cli:
     status: MAPPED
     sampled: 2026-06-09
-    audited: 2026-06-14
-    audited_sha: ee8b0e6
+    audited: 2026-06-19
+    audited_sha: fe7825c
     blocks: []
     blockedBy: []
     detail: cli.md
@@ -59,15 +59,15 @@ arrows:
     drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
 
   skill:
-    status: MAPPED
+    status: OK
     sampled: 2026-06-14
-    audited: 2026-06-14
-    audited_sha: ee8b0e6
+    audited: 2026-06-19
+    audited_sha: fe7825c
     blocks: []
     blockedBy: []
     detail: skill.md
-    next: "Audit SKILL-* specs against SKILL.md implementation and flip markers to [x] as verified"
-    drift: "5 binary-first specs (SKILL-BIN-001..005, vat-46x) marked [x]; the other 32 SKILL-* specs remain [ ] (unverified) — the SKILL.md implementation likely satisfies them but no spec-level audit has been performed"
+    next: null
+    drift: null
 
 # Items found during mapping that don't yet belong to a segment.
 unmapped:

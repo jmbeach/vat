@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**OK** — last audited 2026-06-14 (HEAD `ee8b0e6`; previously audited 2026-06-12 at `03b355d`). All 55 active specs implemented across 8 modules. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`.
+**OK** — last audited 2026-06-18 (HEAD `3ef5999`; previously audited 2026-06-14 at `ee8b0e6`). All 55 active specs implemented across 8 modules. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`. `Bullet::bare_title()` added (vat-mzd, PR #61) to strip the SYNC-PTR pointer suffix for display/search contexts — not a new FMT-* spec, infrastructure for `sync`.
 
 ## References
 
