@@ -86,7 +86,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 5. **FMT-WS-002 implemented** — `Bullet::serialize` strips trailing whitespace (PR #46).
 
-6. **FMT-PFX-* implemented (vat-h4n)** — `src/prefix.rs` validates the user-chosen project-ID prefix as 3 ASCII alphanumeric characters, reusing `Base32Error` for a single error type. The prefix segment of every `<prefix>-<suffix>` token check was switched from the Crockford `base32::validate` to `prefix::validate` in `src/project_config.rs`, `src/tombstone.rs`, and `src/bullet.rs`, so a relaxed prefix (e.g. `lib`, `ui0`) round-trips end to end. The auto-generated suffix keeps Crockford (`base32::validate`/`random`) unchanged.
+6. **FMT-PFX-* implemented (vat-h4n)** — `src/prefix.rs` validates the user-chosen project-ID prefix as 3 ASCII alphanumeric characters, with a dedicated `PrefixError` (not the Crockford `Base32Error`, which would mislabel a prefix failure). The prefix segment of every `<prefix>-<suffix>` token check was switched from the Crockford `base32::validate` to `prefix::validate` in `src/project_config.rs`, `src/tombstone.rs`, and `src/bullet.rs`, so a relaxed prefix (e.g. `lib`, `ui0`) round-trips end to end. The auto-generated suffix keeps Crockford (`base32::validate`/`random`) unchanged.
 
 ## Work Required
 

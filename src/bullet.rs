@@ -301,7 +301,7 @@ mod tests {
 
     // @spec FMT-MARK-001
     #[test]
-    fn parse_id_with_ambiguous_prefix_now_recognized() {
+    fn parse_id_accepts_non_crockford_letters_in_prefix() {
         // 'o' and 'i' are excluded from Crockford base32 but are valid in a
         // human-chosen prefix; a `lib-`/`oii-` style ID must parse. The suffix
         // stays Crockford.
@@ -315,7 +315,7 @@ mod tests {
 
     // @spec FMT-MARK-001
     #[test]
-    fn parse_id_with_ambiguous_suffix_not_recognized() {
+    fn parse_id_rejects_non_crockford_letters_in_suffix() {
         // The suffix keeps the Crockford rule: 'o'/'i' in the suffix are invalid.
         let bullet = Bullet::parse("- [bar-oii] title\n").unwrap();
         assert_eq!(bullet.id, None);

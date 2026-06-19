@@ -302,8 +302,8 @@ mod tests {
 
     use super::classify_exit_code;
     use crate::backlog_file::{SUPPORTED_MAJOR, UnsupportedVersion};
-    use crate::base32::Base32Error;
     use crate::errors::UserError;
+    use crate::prefix::PrefixError;
     use crate::project_config::ConfigError;
     use crate::tombstone::TombstoneError;
     use crate::user_config::UserConfigError;
@@ -354,7 +354,7 @@ mod tests {
     // @spec CMD-EXIT-002
     #[test]
     fn config_invalid_project_id_is_user() {
-        let e = anyhow(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+        let e = anyhow(ConfigError::InvalidProjectId(PrefixError::WrongLength {
             expected: 3,
             got: 2,
         }));

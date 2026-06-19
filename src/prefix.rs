@@ -1,11 +1,24 @@
 // @spec FMT-PFX-001, FMT-PFX-002, FMT-PFX-003, FMT-PFX-004
 
-#![allow(dead_code)]
-
-use crate::base32::Base32Error;
+use thiserror::Error;
 
 /// A project-ID prefix is always exactly this many characters.
-pub(crate) const PREFIX_LEN: usize = 3;
+const PREFIX_LEN: usize = 3;
+
+/// Why a project-ID prefix was rejected.
+///
+/// Distinct from [`crate::base32::Base32Error`] on purpose: the prefix is *not*
+/// Crockford base32 (it accepts the ambiguous `i`/`l`/`o`/`u` and is plain ASCII
+/// alphanumeric), so a "base32"-named error would mislabel the failure. The
+/// variants mirror `Base32Error`'s shape — same `WrongLength`/`InvalidChar`
+/// split, same 0-based char `pos` — but the messages speak in prefix terms.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub(crate) enum PrefixError {
+    #[error("must be exactly {expected} characters, got {got}")]
+    WrongLength { expected: usize, got: usize },
+    #[error("invalid character {ch:?} at position {pos}: must be ASCII alphanumeric")]
+    InvalidChar { ch: char, pos: usize },
+}
 
 /// Validate a user-chosen project-ID prefix.
 ///
@@ -20,22 +33,18 @@ pub(crate) const PREFIX_LEN: usize = 3;
 /// It still rejects the `-` segment separator, whitespace, and the `[`/`]`
 /// bracket characters, so a `[<prefix>-<suffix>]` ID token continues to parse
 /// unambiguously (`is_ascii_alphanumeric` excludes all of these).
-///
-/// Errors reuse [`Base32Error`] so callers (`ProjectConfig`, tombstone, bullet)
-/// keep a single error type and the existing exit-code classification and
-/// caret-rendering paths apply unchanged.
 // @spec FMT-PFX-001, FMT-PFX-002, FMT-PFX-003
-pub(crate) fn validate(s: &str) -> Result<(), Base32Error> {
+pub(crate) fn validate(s: &str) -> Result<(), PrefixError> {
     let got = s.chars().count();
     if got != PREFIX_LEN {
-        return Err(Base32Error::WrongLength {
+        return Err(PrefixError::WrongLength {
             expected: PREFIX_LEN,
             got,
         });
     }
     for (pos, ch) in s.chars().enumerate() {
         if !ch.is_ascii_alphanumeric() {
-            return Err(Base32Error::InvalidChar { ch, pos });
+            return Err(PrefixError::InvalidChar { ch, pos });
         }
     }
     Ok(())
@@ -43,8 +52,7 @@ pub(crate) fn validate(s: &str) -> Result<(), Base32Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate;
-    use crate::base32::Base32Error;
+    use super::{PrefixError, validate};
 
     // @spec FMT-PFX-001
     #[test]
@@ -84,21 +92,21 @@ mod tests {
     fn rejects_wrong_length() {
         assert_eq!(
             validate("ab"),
-            Err(Base32Error::WrongLength {
+            Err(PrefixError::WrongLength {
                 expected: 3,
                 got: 2,
             })
         );
         assert_eq!(
             validate("abcd"),
-            Err(Base32Error::WrongLength {
+            Err(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             })
         );
         assert_eq!(
             validate(""),
-            Err(Base32Error::WrongLength {
+            Err(PrefixError::WrongLength {
                 expected: 3,
                 got: 0,
             })
@@ -111,7 +119,7 @@ mod tests {
         // A too-long all-invalid string surfaces WrongLength, not InvalidChar.
         assert_eq!(
             validate("-- -"),
-            Err(Base32Error::WrongLength {
+            Err(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             })
@@ -132,7 +140,7 @@ mod tests {
         ] {
             assert_eq!(
                 validate(s),
-                Err(Base32Error::InvalidChar { ch, pos }),
+                Err(PrefixError::InvalidChar { ch, pos }),
                 "prefix {s:?} should be rejected at {ch:?}"
             );
         }
@@ -145,10 +153,19 @@ mod tests {
         assert_eq!(s.chars().count(), 3);
         assert_eq!(
             validate(s),
-            Err(Base32Error::InvalidChar {
+            Err(PrefixError::InvalidChar {
                 ch: '\u{1F600}',
                 pos: 1,
             })
         );
+    }
+
+    // @spec FMT-PFX-003
+    #[test]
+    fn error_message_does_not_mention_base32() {
+        // The dedicated PrefixError speaks in prefix terms, not Crockford terms.
+        let msg = validate("a-b").unwrap_err().to_string();
+        assert!(!msg.contains("base32"), "unexpected base32 wording: {msg}");
+        assert!(msg.contains("ASCII alphanumeric"), "got: {msg}");
     }
 }

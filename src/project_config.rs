@@ -8,8 +8,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use toml::Value;
 
-use crate::base32::Base32Error;
-use crate::prefix;
+use crate::prefix::{self, PrefixError};
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
@@ -22,7 +21,7 @@ pub(crate) enum ConfigError {
     #[error("vat.toml [project].id must be a string; run `vat init`")]
     ProjectIdNotString,
     #[error("vat.toml [project].id is invalid: {0}; run `vat init`")]
-    InvalidProjectId(#[from] Base32Error),
+    InvalidProjectId(#[from] PrefixError),
     #[error("vat.toml not found at {0}; run `vat init`")]
     NotFound(PathBuf),
     #[error("vat.toml I/O error: {0}")]
@@ -156,7 +155,7 @@ fn write_project_id(document: &mut Value, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::{ConfigError, ProjectConfig, parse};
-    use crate::base32::Base32Error;
+    use crate::prefix::PrefixError;
 
     // @spec FMT-CFG-001
     #[test]
@@ -207,7 +206,7 @@ mod tests {
         let input = "[project]\nid = \"fooo\"\n";
         assert_eq!(
             parse(input).err(),
-            Some(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            Some(ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             }))
@@ -232,7 +231,7 @@ mod tests {
         let input = "[project]\nid = \"a-b\"\n";
         assert_eq!(
             parse(input).err(),
-            Some(ConfigError::InvalidProjectId(Base32Error::InvalidChar {
+            Some(ConfigError::InvalidProjectId(PrefixError::InvalidChar {
                 ch: '-',
                 pos: 1,
             }))
@@ -256,7 +255,7 @@ mod tests {
             ConfigError::MissingProject,
             ConfigError::MissingProjectId,
             ConfigError::ProjectIdNotString,
-            ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             }),
@@ -327,7 +326,7 @@ mod tests {
     fn new_rejects_invalid_project_id() {
         assert!(matches!(
             ProjectConfig::new("ab"),
-            Err(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            Err(ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 2,
             }))
