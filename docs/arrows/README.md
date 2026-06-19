@@ -13,6 +13,7 @@ HLD → LLDs → EARS → Tests → Code
 - **`sync.md`** — `vat sync` command.
 - **`commands.md`** — All other commands: init, start, block, unblock, done, config.
 - **`cli.md`** — CLI shell: argument parsing, error handling, exit codes.
+- **`skill.md`** — The `vat` prose skill for zero-install agents: nested-repo detection, atomicity guard, atomic claim loop.
 
 ## Starting a session
 
