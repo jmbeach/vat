@@ -8,9 +8,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use toml::Value;
 
-use crate::base32::{Base32Error, validate};
-
-const PROJECT_ID_LEN: usize = 3;
+use crate::base32::Base32Error;
+use crate::prefix;
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
@@ -128,8 +127,12 @@ pub(crate) fn parse(input: &str) -> Result<ProjectConfig, ConfigError> {
     })
 }
 
+// The project-ID *prefix* uses the relaxed alphanumeric validator
+// (`prefix::validate`), not the Crockford `base32::validate` used for the
+// auto-generated suffix. The prefix is chosen once by a human, so the
+// readability constraint that excludes i/l/o/u is the wrong rule here.
 fn validate_and_normalize(id: &str) -> Result<String, ConfigError> {
-    validate(id, PROJECT_ID_LEN)?;
+    prefix::validate(id)?;
     Ok(id.to_ascii_lowercase())
 }
 
@@ -211,15 +214,27 @@ mod tests {
         );
     }
 
+    // @spec FMT-CFG-001
+    #[test]
+    fn parse_accepts_alphanumeric_prefix_rejected_by_crockford() {
+        // 'l', 'i', 'o', 'u' and digits are all valid in a human-chosen prefix.
+        for id in ["lib", "ui0", "iou", "123"] {
+            let input = format!("[project]\nid = \"{id}\"\n");
+            let cfg = parse(&input).unwrap_or_else(|e| panic!("{id:?} should parse: {e:?}"));
+            assert_eq!(cfg.project_id(), id);
+        }
+    }
+
     // @spec FMT-CFG-001, FMT-CFG-002
     #[test]
-    fn parse_rejects_invalid_char_in_project_id() {
-        let input = "[project]\nid = \"abl\"\n";
+    fn parse_rejects_non_alphanumeric_char_in_project_id() {
+        // The '-' separator must be rejected so `[<prefix>-<suffix>]` tokens parse.
+        let input = "[project]\nid = \"a-b\"\n";
         assert_eq!(
             parse(input).err(),
             Some(ConfigError::InvalidProjectId(Base32Error::InvalidChar {
-                ch: 'l',
-                pos: 2,
+                ch: '-',
+                pos: 1,
             }))
         );
     }

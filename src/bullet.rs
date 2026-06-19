@@ -1,6 +1,7 @@
 // @spec FMT-MARK-001, FMT-MARK-002, FMT-MARK-003, FMT-MARK-004, FMT-MARK-005, FMT-MARK-006, FMT-MARK-007, FMT-PARSE-006, FMT-WS-002
 
 use crate::base32;
+use crate::prefix;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -201,12 +202,13 @@ impl Bullet {
     }
 }
 
-// FMT-MARK-001 / FMT-MARK-003: shared `<3-char-base32>-<3-char-base32>` shape
-// check (case-insensitive, per FMT-B32-002).
+// FMT-MARK-001 / FMT-MARK-003: shared `<3-char-prefix>-<3-char-suffix>` shape
+// check (case-insensitive, per FMT-B32-002). The prefix segment uses the relaxed
+// alphanumeric rule (`prefix::validate`); the suffix uses Crockford base32.
 fn is_valid_id_inner(inner: &str) -> bool {
     inner.len() == 7
         && inner.as_bytes()[3] == b'-'
-        && base32::validate(&inner[..3], 3).is_ok()
+        && prefix::validate(&inner[..3]).is_ok()
         && base32::validate(&inner[4..], 3).is_ok()
 }
 
@@ -299,11 +301,25 @@ mod tests {
 
     // @spec FMT-MARK-001
     #[test]
-    fn parse_id_with_ambiguous_base32_chars_not_recognized() {
-        // 'o' and 'i' are excluded from Crockford base32
+    fn parse_id_with_ambiguous_prefix_now_recognized() {
+        // 'o' and 'i' are excluded from Crockford base32 but are valid in a
+        // human-chosen prefix; a `lib-`/`oii-` style ID must parse. The suffix
+        // stays Crockford.
         let bullet = Bullet::parse("- [oii-abc] title\n").unwrap();
+        assert_eq!(bullet.id, Some("oii-abc".to_string()));
+        assert_eq!(bullet.title, "title");
+
+        let bullet = Bullet::parse("- [ui0-7k2] title\n").unwrap();
+        assert_eq!(bullet.id, Some("ui0-7k2".to_string()));
+    }
+
+    // @spec FMT-MARK-001
+    #[test]
+    fn parse_id_with_ambiguous_suffix_not_recognized() {
+        // The suffix keeps the Crockford rule: 'o'/'i' in the suffix are invalid.
+        let bullet = Bullet::parse("- [bar-oii] title\n").unwrap();
         assert_eq!(bullet.id, None);
-        assert_eq!(bullet.title, "[oii-abc] title");
+        assert_eq!(bullet.title, "[bar-oii] title");
     }
 
     // @spec FMT-MARK-001

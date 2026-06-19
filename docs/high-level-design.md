@@ -109,7 +109,7 @@ name = "jared"
 
 `<project>-<suffix>` — e.g., `foo-7k2`.
 
-- **Project prefix**: 3 characters, set once in `backlog/vat.toml`. Globally disambiguates IDs across repos so `foo-7k2` in a commit message is unambiguous.
+- **Project prefix**: 3 ASCII alphanumeric characters (letters + digits, e.g. `lib`, `ui0`, `sql`), set once in `backlog/vat.toml`. Globally disambiguates IDs across repos so `foo-7k2` in a commit message is unambiguous. Unlike the suffix, the prefix is not restricted to Crockford base32 — it is a one-time human choice, so the ambiguous-glyph exclusion does not apply.
 - **Suffix**: 3 characters of Crockford base32 (no ambiguous chars: no I/L/O/U). ~32k IDs per project.
 - **Generation**: random; on `vat sync`, retry against the union of (currently-present IDs, `.used-ids` tombstones) until a free one is found. Tombstones ensure deleted IDs are never reused, so external references (`fixes foo-7k2` in a closed PR) remain unambiguous forever.
 
@@ -191,7 +191,7 @@ When the backlog is its own git repo, the `vat` skill claims and completes tasks
 | Concurrency (any backlog) | Local check + git merge | Git-aware claim, lockfile dir | Lightweight; no network; markdown stays the truth |
 | Skill claiming on a nested-repo backlog | Atomic first-push-wins loop (reset + re-decide) | Textual merge / rebase the loser's change | No false conflicts between disjoint tasks; server-less parallel claiming; guard keeps reset from touching unrelated work |
 | Ingest model | Explicit `vat sync` | Implicit on every command | Predictable diffs |
-| ID scheme | `<3-char-project>-<3-char-base32>` | Word pairs, sequential | Typeable, scoped across repos, merges cleanly |
+| ID scheme | `<3-char-alphanumeric-project>-<3-char-base32-suffix>` | Word pairs, sequential | Typeable, scoped across repos, merges cleanly |
 | ID reuse | Tombstone file | Reuse freely; git history scan | Cheap, robust referenceability |
 | Item file on done | Delete | Keep as record | Git is the record |
 | Blocker on done | Auto-unblock | Leave dangling | Matches user expectation, cheap |

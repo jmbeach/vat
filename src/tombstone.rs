@@ -8,8 +8,11 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::base32::validate;
+use crate::prefix;
 
-/// Each ID segment (prefix and suffix) is this many Crockford base32 chars.
+/// Each ID segment (prefix and suffix) is this many characters. The suffix is
+/// validated against the Crockford base32 alphabet; the prefix uses the relaxed
+/// alphanumeric rule (see [`prefix::validate`]).
 const ID_SEGMENT_LEN: usize = 3;
 
 #[derive(Debug, Error)]
@@ -50,13 +53,14 @@ impl PartialEq for TombstoneError {
     }
 }
 
-/// A line is a well-formed ID iff it is `<3>-<3>` with both segments in the
-/// Crockford base32 alphabet. We do not check the prefix against `vat.toml` —
-/// cross-prefix lines are still well-formed at this layer; sync owns that check.
+/// A line is a well-formed ID iff it is `<3>-<3>` with a 3-char alphanumeric
+/// prefix and a 3-char Crockford base32 suffix. We do not check the prefix
+/// against `vat.toml` — cross-prefix lines are still well-formed at this layer;
+/// sync owns that check.
 fn is_valid_id(s: &str) -> bool {
     match s.split_once('-') {
-        Some((prefix, suffix)) => {
-            validate(prefix, ID_SEGMENT_LEN).is_ok() && validate(suffix, ID_SEGMENT_LEN).is_ok()
+        Some((id_prefix, suffix)) => {
+            prefix::validate(id_prefix).is_ok() && validate(suffix, ID_SEGMENT_LEN).is_ok()
         }
         None => false,
     }
@@ -331,6 +335,33 @@ mod tests {
             TombstoneError::MalformedLine {
                 line_no: 2,
                 content: "bar-lll".to_string(),
+            }
+        );
+    }
+
+    // @spec FMT-TOMB-004
+    #[test]
+    fn read_accepts_alphanumeric_prefix_with_crockford_suffix() {
+        // 'lib' prefix contains 'l'/'i' (excluded from Crockford) but is a valid
+        // human-chosen prefix; the suffix '7k2' is still Crockford. This is the
+        // round-trip that a relaxed `vat init` prefix produces.
+        let dir = project_dir();
+        fs::write(used_ids_path(&dir), "lib-7k2\nui0-9p3\n").unwrap();
+        let got = read(&used_ids_path(&dir)).unwrap();
+        assert_eq!(got, set_of(&["lib-7k2", "ui0-9p3"]));
+    }
+
+    // @spec FMT-TOMB-004
+    #[test]
+    fn read_rejects_non_crockford_suffix_even_with_valid_prefix() {
+        // The suffix keeps the Crockford rule: 'lll' is rejected.
+        let dir = project_dir();
+        fs::write(used_ids_path(&dir), "lib-7k2\nlib-lll\n").unwrap();
+        assert_eq!(
+            read(&used_ids_path(&dir)).unwrap_err(),
+            TombstoneError::MalformedLine {
+                line_no: 2,
+                content: "lib-lll".to_string(),
             }
         );
     }

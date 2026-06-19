@@ -22,9 +22,11 @@ pub(crate) enum InitError {
 
 /// Initialize a new backlog under `project_root/backlog/`.
 ///
-/// `prefix` is the already-resolved 3-char Crockford base32 prefix (either
-/// from the CLI arg or from the interactive prompt in the caller). Validation
-/// is delegated to `ProjectConfig::new`.
+/// `prefix` is the already-resolved 3-char alphanumeric prefix (either from the
+/// CLI arg or from the interactive prompt in the caller). Validation is
+/// delegated to `ProjectConfig::new`, which accepts any 3 ASCII alphanumeric
+/// characters (letters a-z case-insensitive, digits 0-9) — unlike the Crockford
+/// suffix, the prefix is chosen once by a human so i/l/o/u are allowed.
 // @spec CMD-INIT-001, CMD-INIT-002, CMD-INIT-004, CMD-INIT-005, CMD-INIT-006, FMT-FM-005
 pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitError> {
     let backlog_dir = project_root.join("backlog");
@@ -34,7 +36,7 @@ pub(crate) fn init(project_root: &Path, prefix: &str) -> Result<String, InitErro
         return Err(InitError::AlreadyInitialized);
     }
 
-    // CMD-INIT-004: validate prefix via ProjectConfig (3 chars, Crockford base32).
+    // CMD-INIT-004: validate prefix via ProjectConfig (3 ASCII alphanumeric chars).
     let config = ProjectConfig::new(prefix)?;
     let normalized = config.project_id().to_string();
 
@@ -144,11 +146,31 @@ mod tests {
 
     // @spec CMD-INIT-004
     #[test]
-    fn init_rejects_prefix_with_invalid_crockford_chars() {
+    fn init_accepts_alphanumeric_prefix_rejected_by_crockford() {
+        // 'l', 'i', 'o', 'u' are excluded from Crockford base32 but are valid
+        // in a human-chosen prefix — `lib`, `ui0`, etc. must be accepted now.
         let dir = tempfile::tempdir().unwrap();
-        // 'l', 'i', 'o', 'u' are excluded from the Crockford alphabet.
-        let err = init(dir.path(), "lol").unwrap_err();
-        assert!(matches!(err, InitError::InvalidPrefix(_)));
+        let msg = init(dir.path(), "lib").unwrap();
+        assert_eq!(msg, "initialized backlog/ with prefix lib");
+
+        let dir = tempfile::tempdir().unwrap();
+        let msg = init(dir.path(), "ui0").unwrap();
+        assert_eq!(msg, "initialized backlog/ with prefix ui0");
+    }
+
+    // @spec CMD-INIT-004
+    #[test]
+    fn init_rejects_prefix_with_non_alphanumeric_chars() {
+        // The separator, whitespace, and brackets must still be rejected so
+        // `[<prefix>-<suffix>]` ID tokens keep parsing.
+        let dir = tempfile::tempdir().unwrap();
+        for bad in ["a-b", "a b", "[ab", "ab]", "a.b"] {
+            let err = init(dir.path(), bad).unwrap_err();
+            assert!(
+                matches!(err, InitError::InvalidPrefix(_)),
+                "prefix {bad:?} should be invalid"
+            );
+        }
     }
 
     // @spec CMD-INIT-004
@@ -163,7 +185,7 @@ mod tests {
     #[test]
     fn init_normalizes_uppercase_prefix_to_lowercase() {
         let dir = tempfile::tempdir().unwrap();
-        // "BAR" is a valid uppercase Crockford base32 prefix (B, A, R all valid).
+        // "BAR" is a valid uppercase alphanumeric prefix; normalized to lowercase.
         let msg = init(dir.path(), "BAR").unwrap();
         assert!(
             msg.contains("bar"),

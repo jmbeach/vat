@@ -12,6 +12,7 @@ mod errors;
 mod file_io;
 mod id_assignment;
 mod item_file;
+mod prefix;
 mod project_config;
 mod readme_template;
 mod sync;
@@ -43,7 +44,7 @@ struct Cli {
 enum Commands {
     /// Create backlog/ and write initial files
     Init {
-        /// 3-char Crockford base32 project prefix (prompted if omitted)
+        /// 3-char alphanumeric project prefix (prompted if omitted)
         prefix: Option<String>,
     },
     /// Assign IDs, extract notes, normalize markers
@@ -144,7 +145,7 @@ fn cmd_init(prefix: Option<String>) {
 }
 
 fn prompt_for_prefix() -> String {
-    print!("Project prefix (3 Crockford base32 chars): ");
+    print!("Project prefix (3 alphanumeric chars): ");
     io::stdout().flush().ok();
     let mut input = String::new();
     // A closed stdin (non-interactive: CI pipeline, `vat init < /dev/null`)

@@ -75,7 +75,7 @@ Only `-` is recognized as a bullet marker; lines starting with `*` or `+` are tr
 - [<id>] [in-progress] [by:<name>] [blocked-by:<id>] <title>
 ```
 
-- **`[<id>]`** — required after `vat sync`. Format: `<project>-<suffix>` where `<project>` is the 3-char Crockford base32 project prefix from `vat.toml` and `<suffix>` is 3 chars Crockford base32. Pre-sync, the bullet may have no `[id]`.
+- **`[<id>]`** — required after `vat sync`. Format: `<project>-<suffix>` where `<project>` is the 3-char alphanumeric project prefix from `vat.toml` (FMT-PFX-001) and `<suffix>` is 3 chars Crockford base32. Pre-sync, the bullet may have no `[id]`.
 - **`[in-progress]`** — literal string, optional.
 - **`[by:<name>]`** — `<name>` is a non-empty string of `[A-Za-z0-9_.-]+`. Optional.
 - **`[blocked-by:<id>]`** — `<id>` matches the project ID format. Optional. Multiple `[blocked-by:...]` markers are not supported in v1; only the first is preserved if a user types more than one.
@@ -137,14 +137,14 @@ Callers (`vat sync`, `vat done`) hold the path; tombstone is a dumb file-format 
 - Missing file with `backlog/` present → `Ok(empty set)`. The file is only required to exist *for callers that need to write* (sync).
 - Missing parent `backlog/` directory → `Err(NoBacklogDir)`, symmetric with the writer. An uninitialized project fails loudly on read rather than reporting "no used IDs" — the distinction between an absent file (fine) and an absent project dir (a config bug) is preserved.
 - Each line is trimmed of surrounding ASCII whitespace.
-- Trimmed-empty lines and lines that fail the `<3>-<3>` Crockford ID shape produce a hard error naming the 1-based line number. Reader is strict: a malformed tombstone is a config bug and should fail loudly so a human can fix it, not silently mask collisions.
+- Trimmed-empty lines and lines that fail the `<3>-<3>` ID shape (alphanumeric prefix per FMT-PFX-001, Crockford base32 suffix) produce a hard error naming the 1-based line number. Reader is strict: a malformed tombstone is a config bug and should fail loudly so a human can fix it, not silently mask collisions.
 - Valid IDs are lowercase-normalized before insertion. Hand-edits introducing uppercase don't leak past this layer.
 - Dedup is automatic — return type is a `HashSet<String>`.
 - IDs are stored as opaque `String` post-normalization; tombstone does not interpret the prefix or check it against `vat.toml`. Cross-prefix lines (a leftover from a renamed project) are still well-formed at this layer; sync's own prefix check catches them upstream.
 
 **Writer semantics.**
 - Opens the file with `OpenOptions::new().read(true).create(true).append(true)`; creating it if missing satisfies the "create on first write" half of FMT-TOMB-002. The `.read(true)` flag is required so the seek-and-read-last-byte trailing-newline check below can run — without it `read_exact` returns `EBADF` on every non-empty file.
-- Input validation: before opening the file, each supplied ID is checked against the same `<3>-<3>` Crockford shape the reader enforces, returning `MalformedLine` (with the 1-based position in the batch) on the first failure. The reader is strict, so writing an unvalidated ID — a bare word, or one containing an embedded `\n` — would yield a tombstone the reader then hard-errors on, requiring manual repair. The guard bails before the file is created or touched. This is shape validation only, not deduplication or prefix filtering.
+- Input validation: before opening the file, each supplied ID is checked against the same `<3>-<3>` shape the reader enforces (alphanumeric prefix, Crockford suffix), returning `MalformedLine` (with the 1-based position in the batch) on the first failure. The reader is strict, so writing an unvalidated ID — a bare word, or one containing an embedded `\n` — would yield a tombstone the reader then hard-errors on, requiring manual repair. The guard bails before the file is created or touched. This is shape validation only, not deduplication or prefix filtering.
 - Blind append: writes one `<id>\n` line per input element, in input order, with no dedup against existing contents and no prefix filtering. Sync already holds the live set; dedup-on-read makes write-time dedup redundant. The LLD-level "redundant write … kept for safety" line on `vat done` depends on this. An empty input batch is a no-op — the file is neither created nor modified — but the parent-directory check below still runs first.
 - Defensive trailing-newline: before writing, reads the final byte of the existing file (if any) and prepends a `\n` to the write buffer when it isn't already `\n`. A truncated hand-edit can't fuse the next append onto the previous tail. (This guards single-process hand-edits only; see **Concurrency** for the racing-writers case.)
 - Parent-directory `backlog/` must exist. It is checked before the empty-batch shortcut so a zero-ID append can't silently succeed against a missing project. A missing parent is surfaced as a typed `TombstoneError::NoBacklogDir { path }`; a parent that exists but is not a directory (e.g. a regular file named `backlog`) is surfaced as the distinct `TombstoneError::BacklogNotDirectory { path }` so the error names the real problem instead of claiming the directory is absent. Both let callers render a "run `vat init`" message. The writer does not `create_dir_all` — that would let tombstone backdoor project structure that only `vat init` should produce.
@@ -157,10 +157,10 @@ Callers (`vat sync`, `vat done`) hold the path; tombstone is a dumb file-format 
 
 ```toml
 [project]
-id = "foo"   # exactly 3 characters, Crockford base32 alphabet
+id = "foo"   # exactly 3 ASCII alphanumeric characters (letters + digits)
 ```
 
-- `project.id` is required. Validated on every command; an invalid or missing prefix is a hard error with a pointer to `vat init`.
+- `project.id` is required. Validated on every command via the `prefix` module (3 ASCII alphanumeric chars, FMT-PFX-001) — not the Crockford suffix validator; an invalid or missing prefix is a hard error with a pointer to `vat init`.
 - The file may contain other `[section]` blocks in the future; unknown keys are preserved on rewrite (write only the keys we own).
 
 ## `~/.config/vat/config.toml`
@@ -214,18 +214,20 @@ Missing `[user]` table and missing `name` key are **not** errors (FMT-USR-002); 
 
 ## ID alphabet & generation
 
-A small shared primitive (likely `src/base32.rs`) backs every place an ID or prefix is validated, parsed, or generated.
+A small shared primitive (`src/base32.rs`) backs the auto-generated **suffix** wherever it is validated, parsed, or generated. The user-chosen **prefix** has a separate validator (`src/prefix.rs`, below) because the two segments answer to different rules.
 
-**Alphabet.** `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (32 chars, Crockford — no `I`, `L`, `O`, `U`). Inputs are accepted in either case; everything VAT writes is lowercase.
+**Suffix alphabet.** `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (32 chars, Crockford — no `I`, `L`, `O`, `U`). Inputs are accepted in either case; everything VAT writes is lowercase.
 
-**Strict input.** Validation rejects any character outside the canonical alphabet, including the ambiguous `I`/`L`/`O`/`U`. We do not silently fold `I/L → 1` or `O → 0` per Crockford's decoder hint — the project prefix and suffix are short, user-typed identifiers and a typo should be a hard error pointing at the bad character, not a quiet rewrite.
+**Strict suffix input.** Validation rejects any character outside the canonical alphabet, including the ambiguous `I`/`L`/`O`/`U`. We do not silently fold `I/L → 1` or `O → 0` per Crockford's decoder hint — the suffix is short and a typo should be a hard error pointing at the bad character, not a quiet rewrite.
 
-**Module surface.** Two `pub(crate)` operations:
+**`base32` module surface.** Two `pub(crate)` operations:
 
-- `validate(s, expected_len) -> Result<(), Base32Error>` — checks length and per-character membership in the alphabet (case-insensitive). The `expected_len` is passed by callers (`3` for both prefix and suffix today) so the magic number stays visible at call sites and tests can hit the `WrongLength` path directly.
+- `validate(s, expected_len) -> Result<(), Base32Error>` — checks length and per-character membership in the Crockford alphabet (case-insensitive). The `expected_len` is passed by callers (`3` for the suffix) so the magic number stays visible at call sites and tests can hit the `WrongLength` path directly. Used for the **suffix** segment everywhere an ID is validated.
 - `random(n, &mut impl RngCore) -> String` — generates `n` lowercase Crockford base32 characters from a caller-supplied RNG. Always lowercase. Returns an owned `String` — the allocation is negligible against the 100-retry collision loop in `vat sync`. RNG is injected so tests can pass a seeded RNG and assert exact output; production callers pass `rand::thread_rng()`.
 
-**Error type.** `Base32Error` is a `thiserror`-derived enum with `WrongLength { expected, got }` and `InvalidChar { ch, pos }` variants. `pos` is a 0-based char index (not byte index) so it aligns with printed glyph positions even if the input contains non-ASCII characters; the renderer can `+1` if it wants a 1-based "column N" message. Variants exist so callers (`vat init`, `vat config set project.id`) can match on `InvalidChar` to render a caret under the bad character. The project-wide error-handling pattern is documented in [cli.md](./cli.md#error-handling).
+**Prefix validator (`src/prefix.rs`).** A separate `validate(s) -> Result<(), Base32Error>` for the **project-ID prefix** (FMT-PFX-001..004). It accepts any 3 ASCII *alphanumeric* characters (`is_ascii_alphanumeric`: letters `a`–`z` case-insensitive, digits `0`–`9`), and rejects the `-` separator, whitespace, and `[`/`]` brackets so `[<prefix>-<suffix>]` ID tokens keep parsing. The prefix is chosen once by a human and never regenerated, so the Crockford readability constraint (no `I`/`L`/`O`/`U`) is the wrong rule — it needlessly rejects natural choices like `lib`, `ui`, `io`, `sql`. We deliberately go alphanumeric rather than letters-only: digits cost nothing to allow, parse unambiguously in the `<prefix>-<suffix>` token, and let users mirror existing project codes (`k8s`, `v2x`, `s3`). The validator **reuses `Base32Error`** so `ProjectConfig`'s `InvalidProjectId(#[from] Base32Error)`, the exit-code classification in `main.rs`, and the caret-rendering path all apply unchanged. It is wired into `ProjectConfig` (`vat init` / `vat config set project.id`), the tombstone reader/writer (`.used-ids` prefix segment), and the bullet `[id]`/`[blocked-by:]` marker parser — every place a `<prefix>-<suffix>` token's prefix segment is checked — so a relaxed prefix round-trips end to end.
+
+**Error type.** `Base32Error` is a `thiserror`-derived enum with `WrongLength { expected, got }` and `InvalidChar { ch, pos }` variants, shared by both validators. `pos` is a 0-based char index (not byte index) so it aligns with printed glyph positions even if the input contains non-ASCII characters; the renderer can `+1` if it wants a 1-based "column N" message. Variants exist so callers (`vat init`, `vat config set project.id`) can match on `InvalidChar` to render a caret under the bad character. The project-wide error-handling pattern is documented in [cli.md](./cli.md#error-handling).
 
 **No decoding to bytes.** VAT never decodes Crockford base32 to bytes — IDs are opaque tokens, not encoded numbers. The module exposes alphabet membership and random-character generation only.
 
@@ -247,11 +249,11 @@ All file reads and writes flow through a single helper module (`src/file_io.rs`)
 
 - **First `---` after the frontmatter as the parsed/freeform boundary.** Simpler than a magic comment. Markdown-native. The frontmatter (if present) consumes its own pair of `---` delimiters first, then the next `---` line in the file is the body's boundary. Cost: someone using `---` for a section break inside the parsed region truncates their backlog. Documented as a known restriction.
 - **Optional frontmatter for versioning.** Provides an upgrade path without forcing existing users to add ceremony. Supports a "refuse to operate on newer schema" check so a stale CLI doesn't silently corrupt a forward-versioned file. Considered a sentinel comment (`<!-- vat-version: 1 -->`); rejected as less standard and harder to extend with other metadata later.
-- **Crockford base32 for both prefix and suffix.** Same alphabet everywhere — easier to validate, no I/L/O/U confusion. RFC4648 base32 was rejected for the ambiguous character set.
+- **Crockford base32 for the auto-generated suffix; relaxed alphanumeric for the user-chosen prefix.** Originally both segments used Crockford so the alphabet was uniform, but that needlessly rejected natural prefixes like `lib`, `ui`, `io`, `sql` (the `I`/`L`/`O`/`U` exclusion is a readability rule for *random* IDs, not for a one-time human choice). The suffix keeps Crockford (RFC4648 base32 was rejected for the ambiguous set); the prefix now accepts any 3 ASCII alphanumeric characters via a separate `prefix` validator (vat-h4n, FMT-PFX-001). Cost: the two segments no longer share one alphabet, so the `<prefix>-<suffix>` token parsers validate each half with its own rule.
 - **Markers front-loaded, fixed order.** Easier parsing (can detect markers before reaching the title) and easier visual scanning. Free-form marker placement was rejected for parser complexity.
 - **Notes go in a separate file rather than staying inline.** Keeps `backlog.md` scannable as a flat list. Cost: two files to look at for a task with notes; mitigated by `[id]` being the obvious lookup key.
 - **Tombstone file rather than git-history scan.** Cheap, explicit, decoupled from git internals. Cost: a second source of truth that can drift if hand-edited; accepted because writers are limited and the file is append-only.
-- **Strict Crockford input (no `I/L/O` folding).** Crockford's decoder hint says lenient decoders should fold `I/L → 1` and `O → 0`. We don't, because the inputs here are short user-typed identifiers where a typo is more likely than intentional use of an ambiguous glyph; a hard error is more helpful than a silent rewrite. Cost: a user who types `Iol` for their prefix gets an error instead of `101`.
+- **Strict Crockford input for the suffix (no `I/L/O` folding).** Crockford's decoder hint says lenient decoders should fold `I/L → 1` and `O → 0`. We don't for the suffix, because a hand-typed suffix (e.g. in `.used-ids` or a `[blocked-by:]` marker) with an ambiguous glyph is more likely a typo than intentional; a hard error is more helpful than a silent rewrite. Cost: a `[bar-Iol]` marker is treated as un-parsed title text rather than folded to `bar-101`. (This applies only to the suffix — the user-chosen prefix accepts `I`/`L`/`O`/`U` as ordinary alphanumeric characters, FMT-PFX-001.)
 - **Hand-rolled alphabet, no `crockford` crate.** The surface is two functions over a 32-char table; pulling a crate would dwarf the implementation. Cost: we own ~15 lines of alphabet code.
 - **Injected RNG.** `random` takes `&mut impl RngCore` rather than calling `thread_rng()` internally, so collision-retry tests in `vat sync` can drive deterministic sequences. Cost: every caller threads an RNG through; in practice only `vat sync` calls it.
 - **Normalize all line endings on read, not just CRLF.** A file saved with bare-CR line endings (rare, but possible from legacy exports or odd paste sources) would otherwise parse as a single giant line and confuse every downstream parser. Cost: a note body that deliberately contains a `\r` (e.g., terminal output with progress bars) loses fidelity on round-trip. Accepted — the failure mode of leaving bare CR untouched is worse than the rare data-fidelity loss.

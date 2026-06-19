@@ -116,7 +116,7 @@ Preamble is preserved byte-for-byte and emitted at the top of the parsed region 
 - [<id>] [in-progress] [by:<name>] [blocked-by:<id>] <title>
 ```
 
-- `[<id>]` — required after `vat sync`. Format `<project>-<suffix>`: 3-char Crockford base32 prefix from `vat.toml` + `-` + 3 chars Crockford base32. Pre-sync, may be absent.
+- `[<id>]` — required after `vat sync`. Format `<project>-<suffix>`: 3-char alphanumeric prefix from `vat.toml` (letters + digits) + `-` + 3 chars Crockford base32 suffix. Pre-sync, may be absent.
 - `[in-progress]` — literal, optional.
 - `[by:<name>]` — `<name>` matches `[A-Za-z0-9_.-]+`. Optional.
 - `[blocked-by:<id>]` — `<id>` matches the project ID format. Optional. Multiple `[blocked-by:...]` markers not supported in v1; preserve only the first.
@@ -155,7 +155,7 @@ Plain text, newline-delimited, one full ID per line (e.g., `foo-7k2`). Append-or
 
 ```toml
 [project]
-id = "foo"   # exactly 3 characters, Crockford base32 alphabet
+id = "foo"   # exactly 3 ASCII alphanumeric characters (letters + digits)
 ```
 
 - `project.id` is required. Validate on every command; missing/invalid is a hard error pointing at `vat init`.
@@ -171,13 +171,15 @@ name = "jared"
 - Path: `$XDG_CONFIG_HOME/vat/config.toml` if set, else `~/.config/vat/config.toml`.
 - `user.name` is optional in the file; commands that require it (`vat start`) error with a pointer to `vat config set user.name <name>`.
 
-## Crockford base32 alphabet
+## ID alphabets
 
-`0123456789abcdefghjkmnpqrstvwxyz` — 32 chars, no `i`/`l`/`o`/`u`. Inputs accepted in either case; everything VAT writes is lowercase.
+An ID is `<prefix>-<suffix>`, and the two segments use **different** validators:
 
-**Strict validation.** Reject any character outside the alphabet, including ambiguous `I`/`L`/`O`/`U`. Do NOT silently fold `I/L → 1` or `O → 0` per Crockford's lenient decoder hint — for short user-typed identifiers, a hard error pointing at the bad character is more helpful than a quiet rewrite.
+**Suffix — Crockford base32.** `0123456789abcdefghjkmnpqrstvwxyz` — 32 chars, no `i`/`l`/`o`/`u`. The auto-generated suffix is restricted to this set for readability (no ambiguous glyphs). Inputs accepted in either case; everything VAT writes is lowercase. Reject any character outside the alphabet, including ambiguous `I`/`L`/`O`/`U`; do NOT silently fold `I/L → 1` or `O → 0` per Crockford's lenient decoder hint — for a short suffix, a hard error pointing at the bad character is more helpful than a quiet rewrite.
 
-VAT never decodes Crockford base32 to bytes — IDs are opaque tokens.
+**Prefix — alphanumeric.** The user-chosen `project.id` prefix accepts any 3 ASCII alphanumeric characters (letters `a`–`z` case-insensitive, digits `0`–`9`), so natural choices like `lib`, `ui0`, `io`, `sql` are allowed — the Crockford `i`/`l`/`o`/`u` exclusion does **not** apply to the prefix, since it is a one-time human choice, not a generated value. Still reject the `-` separator, whitespace, and `[`/`]` brackets so `[<prefix>-<suffix>]` tokens keep parsing. Stored lowercase.
+
+VAT never decodes either segment to bytes — IDs are opaque tokens.
 
 ## Common machinery
 
@@ -366,7 +368,7 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
 
 1. If `backlog/` exists → `backlog/ already exists; vat is initialized`.
 2. Resolve prefix: argument takes precedence; otherwise prompt the user.
-3. Validate prefix: exactly 3 chars, all in Crockford base32 (case-insensitive); store lowercase.
+3. Validate prefix: exactly 3 ASCII alphanumeric chars (letters + digits, case-insensitive); store lowercase.
 4. Create `backlog/` and write:
    - `backlog/vat.toml` containing `[project]\nid = "<prefix>"\n`.
    - `backlog/backlog.md` containing only:
@@ -414,7 +416,7 @@ Supported keys: `user.name`, `project.id`. Print the value to stdout, or print n
 ### `vat config set <key> <value>`
 
 - `user.name`: writes to global config (creating `~/.config/vat/config.toml` and parent dirs as needed). Format `[user]\nname = "<value>"\n`. Preserve unknown sections/keys.
-- `project.id`: writes to `backlog/vat.toml`. Validate (3 chars, Crockford base32). **Refuse** if any id in `backlog.md` or `.used-ids` uses the old prefix — changing prefix mid-project would orphan ids. No `--force`. Users with a real need can edit `vat.toml` directly.
+- `project.id`: writes to `backlog/vat.toml`. Validate (3 ASCII alphanumeric chars). **Refuse** if any id in `backlog.md` or `.used-ids` uses the old prefix — changing prefix mid-project would orphan ids. No `--force`. Users with a real need can edit `vat.toml` directly.
 - Other keys → `unknown config key: <key>`.
 
 ## Files this skill is allowed to touch
