@@ -8,7 +8,7 @@ pub(crate) const BACKLOG_README_TEMPLATE: &str = include_str!("templates/README.
 
 /// Render the baked template for a project, substituting every `{prefix}`
 /// placeholder with `prefix`. Substitution only — validating `prefix` as a
-/// 3-char Crockford base32 string is `vat init`'s job (CMD-INIT-004).
+/// 3-char alphanumeric string is `vat init`'s job (CMD-INIT-004).
 // @spec CMD-INIT-006
 pub(crate) fn render(prefix: &str) -> String {
     BACKLOG_README_TEMPLATE.replace("{prefix}", prefix)

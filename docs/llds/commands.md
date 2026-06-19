@@ -20,7 +20,7 @@ After mutation, the helper serializes the parsed region back through the same em
 
 1. If `backlog/` exists, error: `backlog/ already exists; vat is initialized`.
 2. Determine project prefix: argument (`vat init <prefix>`) takes precedence; otherwise prompt interactively.
-3. Validate prefix: exactly 3 chars, all in Crockford base32 alphabet (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`, case-insensitive — store lowercase).
+3. Validate prefix: exactly 3 ASCII alphanumeric chars (letters `a`–`z` case-insensitive, digits `0`–`9`; FMT-PFX-001 — store lowercase). Uses the `prefix` validator, not the Crockford suffix validator.
 4. Create `backlog/`, write `backlog/vat.toml`, create `backlog/backlog.md` containing only a YAML frontmatter block with `version: 1`, create empty `backlog/.used-ids`, and write `backlog/README.md`.
 
    The initial `backlog.md` looks like:
@@ -85,7 +85,7 @@ Reuses the shared parse-mutate-emit machinery wired into `sync` by vat-v3k — `
 ## `vat config set <key> <value>`
 
 - `user.name`: writes to global config, creating `~/.config/vat/config.toml` and parent dirs if needed.
-- `project.id`: writes to `backlog/vat.toml`. Validates the value (3 chars, Crockford base32). Refuses if any IDs in `backlog.md` or `.used-ids` use the old prefix — changing prefix mid-project would orphan IDs. v1 has no escape hatch; if a user really needs to rewrite the prefix they can edit `vat.toml` directly.
+- `project.id`: writes to `backlog/vat.toml`. Validates the value (3 ASCII alphanumeric chars, FMT-PFX-001). Refuses if any IDs in `backlog.md` or `.used-ids` use the old prefix — changing prefix mid-project would orphan IDs. v1 has no escape hatch; if a user really needs to rewrite the prefix they can edit `vat.toml` directly.
 - Other keys: error with `unknown config key: <key>`.
 
 ## v1 limits and non-behaviors

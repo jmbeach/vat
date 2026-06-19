@@ -42,9 +42,18 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [x] **FMT-B32-006** — When generating a random Crockford base32 string of length `n`, the system shall emit `n` characters drawn uniformly from the canonical alphabet, all in lowercase.
 - [x] **FMT-B32-007** — When generating a random Crockford base32 string, the system shall draw all randomness from a caller-supplied random number generator.
 
+## Project-ID prefix
+
+These requirements govern the `prefix` module that validates the user-chosen project-ID prefix segment. Unlike the auto-generated suffix (validated against Crockford base32 for readability), the prefix is chosen *once* by a human and never regenerated, so the constraint that excludes the ambiguous glyphs `I`/`L`/`O`/`U` is the wrong rule — it needlessly rejects natural choices like `lib`, `ui`, `io`, or `sql`. See [LLD § ID alphabet & generation](../llds/backlog-format.md#id-alphabet--generation).
+
+- [x] **FMT-PFX-001** — The system shall accept as a project-ID prefix any string of exactly 3 ASCII alphanumeric characters: letters `a`–`z` (case-insensitive) and digits `0`–`9`.
+- [x] **FMT-PFX-002** — When validating a prefix whose length differs from 3, the system shall return an error identifying the expected and actual lengths, and shall not check character membership.
+- [x] **FMT-PFX-003** — When validating a 3-character prefix containing a character that is not ASCII alphanumeric (including the `-` separator, whitespace, and `[`/`]` brackets, so `[<prefix>-<suffix>]` ID tokens keep parsing), the system shall return an error identifying the offending character and its 0-based char index.
+- [x] **FMT-PFX-004** — The system shall store the project-ID prefix lowercase, normalizing uppercase input on write.
+
 ## Bullet line markers
 
-- [x] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where both segments use the Crockford base32 alphabet.
+- [x] **FMT-MARK-001** — A bullet's `[id]` marker shall match `<3-char-prefix>-<3-char-suffix>` where the prefix uses the project-ID prefix alphabet (3 ASCII alphanumeric chars, FMT-PFX-001) and the suffix uses the Crockford base32 alphabet (FMT-B32-001).
 - [x] **FMT-MARK-002** — A bullet's `[by:<name>]` marker shall accept names matching `[A-Za-z0-9_.-]+`.
 - [x] **FMT-MARK-003** — A bullet's `[blocked-by:<id>]` marker shall accept ids matching the same format as FMT-MARK-001.
 - [x] **FMT-MARK-004** — When serializing a bullet, the system shall emit markers in the canonical order: `[id]`, `[in-progress]`, `[by:<name>]`, `[blocked-by:<id>]`, then the title.
@@ -67,7 +76,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 - [x] **FMT-TOMB-001** — `backlog/.used-ids` shall be a newline-delimited list of full IDs.
 - [x] **FMT-TOMB-002** — When `backlog/.used-ids` is missing, the system shall treat it as empty and create it on first write.
 - [x] **FMT-TOMB-003** — The system shall deduplicate IDs when reading `backlog/.used-ids`.
-- [x] **FMT-TOMB-004** — When reading `backlog/.used-ids`, the system shall reject any line that, after trimming surrounding ASCII whitespace, does not match the Crockford `<3>-<3>` ID format, identifying the 1-based line number of the offending content.
+- [x] **FMT-TOMB-004** — When reading `backlog/.used-ids`, the system shall reject any line that, after trimming surrounding ASCII whitespace, does not match the `<3>-<3>` ID format (3-char alphanumeric prefix per FMT-PFX-001, 3-char Crockford base32 suffix), identifying the 1-based line number of the offending content.
 - [x] **FMT-TOMB-005** — When reading `backlog/.used-ids`, the system shall normalize each ID to lowercase before insertion into the returned set.
 - [x] **FMT-TOMB-006** — When appending to `backlog/.used-ids` and the existing file does not end with a `\n` byte, the system shall write a leading `\n` before the appended content.
 - [x] **FMT-TOMB-007** — When appending to `backlog/.used-ids` and the parent `backlog/` directory does not exist, the system shall return a distinct error identifying the missing project directory and shall not create the directory.
@@ -76,7 +85,7 @@ These requirements govern the shared `base32` module used wherever IDs or prefix
 
 ## Project config
 
-- [x] **FMT-CFG-001** — `backlog/vat.toml` shall contain `[project]` with `id` set to a 3-character Crockford base32 string.
+- [x] **FMT-CFG-001** — `backlog/vat.toml` shall contain `[project]` with `id` set to a 3-character project-ID prefix (FMT-PFX-001), stored lowercase.
 - [x] **FMT-CFG-002** — When `vat.toml` is missing or `project.id` is invalid, the system shall abort with an error pointing the user at `vat init`.
 - [x] **FMT-CFG-003** — When writing `vat.toml`, the system shall preserve unknown sections and keys.
 

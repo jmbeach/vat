@@ -12,6 +12,7 @@ mod errors;
 mod file_io;
 mod id_assignment;
 mod item_file;
+mod prefix;
 mod project_config;
 mod readme_template;
 mod sync;
@@ -43,7 +44,7 @@ struct Cli {
 enum Commands {
     /// Create backlog/ and write initial files
     Init {
-        /// 3-char Crockford base32 project prefix (prompted if omitted)
+        /// 3-char alphanumeric project prefix (prompted if omitted)
         prefix: Option<String>,
     },
     /// Assign IDs, extract notes, normalize markers
@@ -144,7 +145,7 @@ fn cmd_init(prefix: Option<String>) {
 }
 
 fn prompt_for_prefix() -> String {
-    print!("Project prefix (3 Crockford base32 chars): ");
+    print!("Project prefix (3 alphanumeric chars): ");
     io::stdout().flush().ok();
     let mut input = String::new();
     // A closed stdin (non-interactive: CI pipeline, `vat init < /dev/null`)
@@ -301,8 +302,8 @@ mod tests {
 
     use super::classify_exit_code;
     use crate::backlog_file::{SUPPORTED_MAJOR, UnsupportedVersion};
-    use crate::base32::Base32Error;
     use crate::errors::UserError;
+    use crate::prefix::PrefixError;
     use crate::project_config::ConfigError;
     use crate::tombstone::TombstoneError;
     use crate::user_config::UserConfigError;
@@ -353,7 +354,7 @@ mod tests {
     // @spec CMD-EXIT-002
     #[test]
     fn config_invalid_project_id_is_user() {
-        let e = anyhow(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+        let e = anyhow(ConfigError::InvalidProjectId(PrefixError::WrongLength {
             expected: 3,
             got: 2,
         }));

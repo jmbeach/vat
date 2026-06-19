@@ -8,9 +8,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use toml::Value;
 
-use crate::base32::{Base32Error, validate};
-
-const PROJECT_ID_LEN: usize = 3;
+use crate::prefix::{self, PrefixError};
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
@@ -23,7 +21,7 @@ pub(crate) enum ConfigError {
     #[error("vat.toml [project].id must be a string; run `vat init`")]
     ProjectIdNotString,
     #[error("vat.toml [project].id is invalid: {0}; run `vat init`")]
-    InvalidProjectId(#[from] Base32Error),
+    InvalidProjectId(#[from] PrefixError),
     #[error("vat.toml not found at {0}; run `vat init`")]
     NotFound(PathBuf),
     #[error("vat.toml I/O error: {0}")]
@@ -128,8 +126,12 @@ pub(crate) fn parse(input: &str) -> Result<ProjectConfig, ConfigError> {
     })
 }
 
+// The project-ID *prefix* uses the relaxed alphanumeric validator
+// (`prefix::validate`), not the Crockford `base32::validate` used for the
+// auto-generated suffix. The prefix is chosen once by a human, so the
+// readability constraint that excludes i/l/o/u is the wrong rule here.
 fn validate_and_normalize(id: &str) -> Result<String, ConfigError> {
-    validate(id, PROJECT_ID_LEN)?;
+    prefix::validate(id)?;
     Ok(id.to_ascii_lowercase())
 }
 
@@ -153,7 +155,7 @@ fn write_project_id(document: &mut Value, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::{ConfigError, ProjectConfig, parse};
-    use crate::base32::Base32Error;
+    use crate::prefix::PrefixError;
 
     // @spec FMT-CFG-001
     #[test]
@@ -204,22 +206,34 @@ mod tests {
         let input = "[project]\nid = \"fooo\"\n";
         assert_eq!(
             parse(input).err(),
-            Some(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            Some(ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             }))
         );
     }
 
+    // @spec FMT-CFG-001
+    #[test]
+    fn parse_accepts_alphanumeric_prefix_rejected_by_crockford() {
+        // 'l', 'i', 'o', 'u' and digits are all valid in a human-chosen prefix.
+        for id in ["lib", "ui0", "iou", "123"] {
+            let input = format!("[project]\nid = \"{id}\"\n");
+            let cfg = parse(&input).unwrap_or_else(|e| panic!("{id:?} should parse: {e:?}"));
+            assert_eq!(cfg.project_id(), id);
+        }
+    }
+
     // @spec FMT-CFG-001, FMT-CFG-002
     #[test]
-    fn parse_rejects_invalid_char_in_project_id() {
-        let input = "[project]\nid = \"abl\"\n";
+    fn parse_rejects_non_alphanumeric_char_in_project_id() {
+        // The '-' separator must be rejected so `[<prefix>-<suffix>]` tokens parse.
+        let input = "[project]\nid = \"a-b\"\n";
         assert_eq!(
             parse(input).err(),
-            Some(ConfigError::InvalidProjectId(Base32Error::InvalidChar {
-                ch: 'l',
-                pos: 2,
+            Some(ConfigError::InvalidProjectId(PrefixError::InvalidChar {
+                ch: '-',
+                pos: 1,
             }))
         );
     }
@@ -241,7 +255,7 @@ mod tests {
             ConfigError::MissingProject,
             ConfigError::MissingProjectId,
             ConfigError::ProjectIdNotString,
-            ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 4,
             }),
@@ -312,7 +326,7 @@ mod tests {
     fn new_rejects_invalid_project_id() {
         assert!(matches!(
             ProjectConfig::new("ab"),
-            Err(ConfigError::InvalidProjectId(Base32Error::WrongLength {
+            Err(ConfigError::InvalidProjectId(PrefixError::WrongLength {
                 expected: 3,
                 got: 2,
             }))

@@ -305,12 +305,28 @@ mod tests {
         write_vat_toml(&backlog, "bar");
         let cfg_path = dir.path().join("user_config.toml");
 
-        let err = set_impl("project.id", "abl", &backlog, &cfg_path).unwrap_err();
+        // '-' is not alphanumeric and must be rejected (it would break ID tokens).
+        let err = set_impl("project.id", "a-b", &backlog, &cfg_path).unwrap_err();
         let msg = format!("{err:#}");
         assert!(
-            msg.contains("InvalidChar") || msg.contains("invalid") || msg.contains("abl"),
+            msg.contains("InvalidChar") || msg.contains("invalid") || msg.contains("a-b"),
             "unexpected error message: {msg}"
         );
+    }
+
+    // @spec CMD-CFG-004
+    #[test]
+    fn set_project_id_accepts_alphanumeric_prefix_rejected_by_crockford() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_vat_toml(&backlog, "bar");
+        let cfg_path = dir.path().join("user_config.toml");
+
+        // 'lib' contains 'l' and 'i' (excluded from Crockford) but is a valid
+        // human-chosen prefix. No IDs exist, so the change is allowed.
+        set_impl("project.id", "lib", &backlog, &cfg_path).unwrap();
+        let content = fs::read_to_string(backlog.join("vat.toml")).unwrap();
+        assert!(content.contains("id = \"lib\""));
     }
 
     // -----------------------------------------------------------------------

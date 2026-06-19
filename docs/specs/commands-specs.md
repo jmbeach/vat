@@ -16,7 +16,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **CMD-INIT-001** — When `backlog/` already exists, `vat init` shall abort with an error.
 - [x] **CMD-INIT-002** — When invoked with `vat init <prefix>`, the system shall use `<prefix>` as the project ID prefix.
 - [x] **CMD-INIT-003** — When invoked with no argument, `vat init` shall prompt the user interactively for the project ID prefix.
-- [x] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 characters in the Crockford base32 alphabet.
+- [x] **CMD-INIT-004** — `vat init` shall reject any prefix that is not exactly 3 ASCII alphanumeric characters (FMT-PFX-001).
 - [x] **CMD-INIT-005** — On success, `vat init` shall create `backlog/`, `backlog/vat.toml` containing `[project] id = "<prefix>"`, `backlog/backlog.md` containing only a `version: 1` frontmatter block, an empty `backlog/.used-ids`, and `backlog/README.md`.
 - [x] **CMD-INIT-006** — `backlog/README.md` shall describe what VAT is, how to obtain it, the purpose of each file in `backlog/`, and the basic workflow. (Template baked into the binary as `readme_template::BACKLOG_README_TEMPLATE`; `vat init` renders and writes it via `readme_template::render`.)
 - [x] **CMD-INIT-007** — After init, no VAT command shall read, validate, or rewrite `backlog/README.md`.
@@ -56,7 +56,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **CMD-CFG-001** — `vat config get user.name` shall print the value from the user config to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
 - [x] **CMD-CFG-002** — `vat config get project.id` shall print the value from `backlog/vat.toml` to stdout and exit 0, or exit 0 with no output if unset; exit 1 only on hard errors (I/O failure, unknown key).
 - [x] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
-- [x] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 Crockford base32 characters.
+- [x] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 ASCII alphanumeric characters (FMT-PFX-001).
 - [x] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
 - [x] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
 
