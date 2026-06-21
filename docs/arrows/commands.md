@@ -4,7 +4,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Status
 
-**PARTIAL** — last audited 2026-06-18 (HEAD `3ef5999`; previously `ee8b0e6`). All commands are now implemented: `vat block` (CMD-BLOCK-001 to 006, `src/cmd_block.rs`) and shell completions (CMD-COMP-001 to 005, `src/cmd_completions.rs`) both landed since the previous audit. `classify_exit_code` is wired through `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`. Only gap: CMD-EXIT-003 — `cmd_init` and `cmd_sync` still hardcode exit 1 for all errors.
+**PARTIAL** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). All commands are implemented. `classify_exit_code` is wired through `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`. Only gap: CMD-EXIT-003 — `cmd_init` and `cmd_sync` still hardcode exit 1 for all errors.
 
 ## References
 
