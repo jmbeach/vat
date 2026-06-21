@@ -14,6 +14,8 @@ It's low friction, compact, and simple.
 
 `vat` has two first-class forms: the Rust binary (the primary distribution) and the [skill](./.claude/skills/vat/SKILL.md) — a prose implementation an agent follows directly, with zero install. I built `vat` *with* `vat`, using the skill to operate the backlog before the binary was finished. Take a look at the [backlog](https://github.com/jmbeach/vat-backlog/blob/main/backlog.md) to see a good example of what a `vat` backlog looks like and the current state of the project.
 
+Read more: [the story behind VAT](https://roygbiv.dev/blog/vat/).
+
 ## Install
 
 Install from crates.io with Cargo. The crate is published as `vat-cli`, and it installs a binary named `vat`:
