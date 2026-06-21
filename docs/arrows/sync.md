@@ -4,7 +4,7 @@
 
 ## Status
 
-**OK** — last audited 2026-06-19 (HEAD `fe7825c`; previously `ee8b0e6`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), and item-file pointer suffix (vat-mzd, PR #61) are all implemented. All 24 active specs are satisfied; 1 deferred (SYNC-GC-001).
+**OK** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), and item-file pointer suffix (vat-mzd, PR #61) are all implemented. All 24 active specs are satisfied; 1 deferred (SYNC-GC-001).
 
 ## References
 
