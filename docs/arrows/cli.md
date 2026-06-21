@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — last audited 2026-06-14 (HEAD `ee8b0e6`). Shell completions wired (vat-f7v): hidden `Completions` subcommand in `src/main.rs`, implemented by `src/cmd_completions.rs`. Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. `classify_exit_code()` is now wired for all commands except `cmd_init` and `cmd_sync`. The CLI shell is covered end-to-end by `tests/e2e_lifecycle.rs`.
+**MAPPED** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). Shell completions wired (vat-f7v): hidden `Completions` subcommand in `src/main.rs`, implemented by `src/cmd_completions.rs`. Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. `classify_exit_code()` is now wired for `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`; `cmd_init` and `cmd_sync` still exit 1 for all errors. The CLI shell is covered end-to-end by `tests/e2e_lifecycle.rs`.
 
 ## References
 
@@ -48,7 +48,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 1. **No dedicated EARS spec file** — `docs/llds/cli.md` has no matching `docs/specs/cli-specs.md`. Argument-parsing behavior (subcommand structure, ID positional args, clap conventions) and error-rendering behavior are documented only in LLD prose. Exit-code specs landed in `commands-specs.md` rather than a dedicated CLI spec. This is a gap in the intent chain.
 
-2. **Exit codes wired** — `classify_exit_code()` at `src/main.rs:183` classifies errors by chain-searching for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal/IO). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. All three exit codes are `@spec`-annotated and covered by 17 unit tests. Currently wired only through `cmd_config_get`/`cmd_config_set`; `cmd_init` and `cmd_sync` still exit 1 for all errors.
+2. **Exit codes partially wired** — `classify_exit_code()` at `src/main.rs:247` classifies errors by chain-searching for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal/IO). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. All three exit codes are `@spec`-annotated. Wired through `cmd_config_get`/`cmd_config_set`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`. `cmd_init` and `cmd_sync` still hardcode `std::process::exit(1)` for all errors (CMD-EXIT-003 gap).
 
 3. **Clap skeleton is complete** — All subcommands (`init`, `sync`, `start`, `block`, `unblock`, `done`, `config get`, `config set`) are wired with correct argument types. Help and version derive from clap defaults. The shell does not need changes to support new command implementations.
 
