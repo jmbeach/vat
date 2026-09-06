@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**OK** — re-verified 2026-06-21 (HEAD `aab182c`); last structural change 2026-06-19 (vat-h4n: project-ID prefix relaxed to alphanumeric). All 59 active specs implemented across 9 modules. vat-h4n added the `src/prefix.rs` validator (FMT-PFX-001..004) and relaxed the prefix segment of every `<prefix>-<suffix>` token check (project config, tombstone, bullet) from Crockford to alphanumeric while keeping the suffix Crockford. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`. `Bullet::bare_title()` added (vat-mzd, PR #61) to strip the SYNC-PTR pointer suffix for display/search contexts — not a new FMT-* spec, infrastructure for `sync`.
+**OK** — re-verified 2026-09-06 (HEAD `c265c95`); last structural change 2026-06-19 (vat-h4n: project-ID prefix relaxed to alphanumeric). All 59 active specs implemented across 9 modules. vat-h4n added the `src/prefix.rs` validator (FMT-PFX-001..004) and relaxed the prefix segment of every `<prefix>-<suffix>` token check (project config, tombstone, bullet) from Crockford to alphanumeric while keeping the suffix Crockford. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`. `Bullet::bare_title()` added (vat-mzd, PR #61) to strip the SYNC-PTR pointer suffix for display/search contexts — not a new FMT-* spec, infrastructure for `sync`.
 
 ## References
 
