@@ -4,7 +4,7 @@ CLI shell — argument parsing, error handling strategy, output conventions, exi
 
 ## Status
 
-**MAPPED** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). Shell completions wired (vat-f7v): hidden `Completions` subcommand in `src/main.rs`, implemented by `src/cmd_completions.rs`. Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. `classify_exit_code()` is now wired for `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`; `cmd_init` and `cmd_sync` still exit 1 for all errors. The CLI shell is covered end-to-end by `tests/e2e_lifecycle.rs`.
+**MAPPED** — re-verified 2026-09-06 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`). Shell completions wired (vat-f7v): hidden `Completions` subcommand in `src/main.rs`, implemented by `src/cmd_completions.rs`. Clap skeleton wired; thiserror+anyhow error pattern established. No dedicated EARS spec file; behavioral exit codes live in `commands-specs.md`. `classify_exit_code()` is now wired for `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`; `cmd_init` and `cmd_sync` still exit 1 for all errors. The CLI shell is covered end-to-end by `tests/e2e_lifecycle.rs`.
 
 ## References
 

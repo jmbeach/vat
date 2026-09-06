@@ -4,7 +4,7 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 
 ## Status
 
-**OK** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). SKILL.md updated in vat-h4n (alphanumeric prefix prose; 18-line change) — all 37 SKILL-* specs remain verified; the prefix alphabet is an `FMT-PFX-*` concern, not a skill-specific behavior.
+**OK** — re-verified 2026-09-06 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`). SKILL.md updated in vat-h4n (alphanumeric prefix prose; 18-line change) — all 37 SKILL-* specs remain verified; the prefix alphabet is an `FMT-PFX-*` concern, not a skill-specific behavior.
 
 ## References
 
