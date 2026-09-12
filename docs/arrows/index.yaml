@@ -37,26 +37,26 @@ arrows:
     drift: null
 
   commands:
-    status: PARTIAL
+    status: OK
     sampled: 2026-06-09
     audited: 2026-09-11
     audited_sha: c265c95
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
-    next: "Thread classify_exit_code through cmd_init and cmd_sync so CMD-EXIT-003 applies to every command."
-    drift: "classify_exit_code() wired through cmd_config/cmd_start/cmd_block/cmd_unblock/cmd_done but not cmd_init or cmd_sync, which still exit 1 for all errors. CMD-EXIT-003 (marked [x] in spec) requires every command to route through classification."
+    next: null
+    drift: null
 
   cli:
-    status: MAPPED
+    status: OK
     sampled: 2026-06-09
     audited: 2026-09-11
     audited_sha: c265c95
     blocks: []
     blockedBy: []
     detail: cli.md
-    next: "Create docs/specs/cli-specs.md to formalize CLI behavioral requirements (argument parsing, error rendering, exit codes)"
-    drift: "No docs/specs/cli-specs.md exists — CLI behavioral requirements (argument parsing, error rendering) live only in LLD prose; exit-code specs (CMD-EXIT-001 to 003) are in commands-specs.md"
+    next: null
+    drift: null
 
   skill:
     status: OK

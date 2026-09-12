@@ -132,14 +132,23 @@ fn cmd_completions(shell: SupportedShell) {
     }
 }
 
-// @spec CMD-INIT-002, CMD-INIT-003
+// @spec CMD-INIT-002, CMD-INIT-003, CMD-EXIT-002, CMD-EXIT-003
 fn cmd_init(prefix: Option<String>) {
+    use cmd_init::InitError;
     let prefix_str = prefix.unwrap_or_else(prompt_for_prefix);
     match cmd_init::init(std::path::Path::new("."), &prefix_str) {
         Ok(msg) => println!("{msg}"),
         Err(e) => {
             eprintln!("{e}");
-            std::process::exit(1);
+            let code = match &e {
+                InitError::Io(_) => 2,
+                // AlreadyInitialized and InvalidPrefix are user-facing errors.
+                // InvalidPrefix wraps ConfigError from ProjectConfig::new, which
+                // only does pure validation today (no IO), so exit 1 is always
+                // correct for this arm.
+                InitError::AlreadyInitialized | InitError::InvalidPrefix(_) => 1,
+            };
+            std::process::exit(code);
         }
     }
 }
@@ -161,11 +170,56 @@ fn prompt_for_prefix() -> String {
     input.trim().to_string()
 }
 
+// @spec CMD-EXIT-002, CMD-EXIT-003
 fn cmd_sync() {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     if let Err(e) = sync::run(backlog_dir) {
         eprintln!("vat sync: {e}");
-        std::process::exit(1);
+        std::process::exit(classify_sync_exit_code(&e));
+    }
+}
+
+fn classify_config_error(ce: &project_config::ConfigError) -> i32 {
+    use project_config::ConfigError;
+    match ce {
+        ConfigError::Io(_) | ConfigError::Parse(_) => 2,
+        ConfigError::MissingProject
+        | ConfigError::MissingProjectId
+        | ConfigError::ProjectIdNotString
+        | ConfigError::InvalidProjectId(_)
+        | ConfigError::NotFound(_) => 1,
+    }
+}
+
+fn classify_tombstone_error(te: &tombstone::TombstoneError) -> i32 {
+    use tombstone::TombstoneError;
+    match te {
+        TombstoneError::Io(_) => 2,
+        TombstoneError::MalformedLine { .. }
+        | TombstoneError::NoBacklogDir { .. }
+        | TombstoneError::BacklogNotDirectory { .. } => 1,
+    }
+}
+
+// @spec CMD-EXIT-002, CMD-EXIT-003
+fn classify_sync_exit_code(e: &sync::SyncError) -> i32 {
+    use id_assignment::IdAssignmentError;
+    use item_file::ItemFileError;
+    use sync::SyncError;
+    match e {
+        SyncError::Io(_) => 2,
+        SyncError::NoBacklog | SyncError::Version(_) => 1,
+        SyncError::Config(ce) => classify_config_error(ce),
+        SyncError::IdAssignment(iae) => match iae {
+            IdAssignmentError::RetryExhausted(_) => 2,
+            IdAssignmentError::DuplicateId(_) => 1,
+        },
+        SyncError::Tombstone(te) => classify_tombstone_error(te),
+        SyncError::ItemFile(ife) => match ife {
+            ItemFileError::Io { .. } | ItemFileError::AlreadyExists(_) => 2,
+            // Utf8 and MissingFrontmatter are on-disk data the user could fix.
+            ItemFileError::MissingFrontmatter | ItemFileError::Utf8(_) => 1,
+        },
     }
 }
 
@@ -247,22 +301,13 @@ fn cmd_config_set(key: &str, value: &str) {
 fn classify_exit_code(e: &anyhow::Error) -> i32 {
     use backlog_file::UnsupportedVersion;
     use errors::UserError;
-    use project_config::ConfigError;
-    use tombstone::TombstoneError;
     use user_config::UserConfigError;
 
     for cause in e.chain() {
         // Matches are exhaustive on purpose: a new error variant must make an
         // explicit exit-code choice here rather than silently inheriting one.
-        if let Some(ce) = cause.downcast_ref::<ConfigError>() {
-            return match ce {
-                ConfigError::Io(_) | ConfigError::Parse(_) => 2,
-                ConfigError::MissingProject
-                | ConfigError::MissingProjectId
-                | ConfigError::ProjectIdNotString
-                | ConfigError::InvalidProjectId(_)
-                | ConfigError::NotFound(_) => 1,
-            };
+        if let Some(ce) = cause.downcast_ref::<project_config::ConfigError>() {
+            return classify_config_error(ce);
         }
         if let Some(ue) = cause.downcast_ref::<UserConfigError>() {
             return match ue {
@@ -274,16 +319,11 @@ fn classify_exit_code(e: &anyhow::Error) -> i32 {
                 | UserConfigError::NoHome => 1,
             };
         }
-        if let Some(te) = cause.downcast_ref::<TombstoneError>() {
-            return match te {
-                // A genuine OS error is internal; the structural variants are all
-                // user-addressable (corrupt tombstone line, or backlog/ missing or
-                // shadowed by a regular file — "run `vat init`").
-                TombstoneError::Io(_) => 2,
-                TombstoneError::MalformedLine { .. }
-                | TombstoneError::NoBacklogDir { .. }
-                | TombstoneError::BacklogNotDirectory { .. } => 1,
-            };
+        if let Some(te) = cause.downcast_ref::<tombstone::TombstoneError>() {
+            // A genuine OS error is internal; the structural variants are all
+            // user-addressable (corrupt tombstone line, or backlog/ missing or
+            // shadowed by a regular file — "run `vat init`").
+            return classify_tombstone_error(te);
         }
         if cause.downcast_ref::<UnsupportedVersion>().is_some() {
             return 1;
@@ -476,5 +516,117 @@ mod tests {
             path: PathBuf::from("backlog"),
         });
         assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // classify_sync_exit_code tests
+    use super::classify_sync_exit_code;
+    use crate::id_assignment::IdAssignmentError;
+    use crate::item_file::ItemFileError;
+    use crate::sync::SyncError;
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_io_error_is_internal() {
+        let e = SyncError::Io(io_err());
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_no_backlog_is_user() {
+        let e = SyncError::NoBacklog;
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_version_is_user() {
+        let e = SyncError::Version(crate::backlog_file::UnsupportedVersion {
+            found: SUPPORTED_MAJOR + 1,
+            supported: SUPPORTED_MAJOR,
+        });
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_config_io_is_internal() {
+        let e = SyncError::Config(ConfigError::Io(io_err()));
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_config_missing_project_is_user() {
+        let e = SyncError::Config(ConfigError::MissingProject);
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_id_assignment_retry_exhausted_is_internal() {
+        let e = SyncError::IdAssignment(IdAssignmentError::RetryExhausted("vat".to_owned()));
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_id_assignment_duplicate_id_is_user() {
+        let e = SyncError::IdAssignment(IdAssignmentError::DuplicateId("vat-abc".to_owned()));
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_tombstone_io_is_internal() {
+        let e = SyncError::Tombstone(TombstoneError::Io(io_err()));
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_tombstone_malformed_line_is_user() {
+        let e = SyncError::Tombstone(TombstoneError::MalformedLine {
+            line_no: 1,
+            content: "bad".to_owned(),
+        });
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_item_file_io_is_internal() {
+        let e = SyncError::ItemFile(ItemFileError::Io {
+            path: PathBuf::from("backlog/items/vat-abc.md"),
+            source: io_err(),
+        });
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_item_file_already_exists_is_internal() {
+        let e = SyncError::ItemFile(ItemFileError::AlreadyExists(PathBuf::from(
+            "backlog/items/vat-abc.md",
+        )));
+        assert_eq!(classify_sync_exit_code(&e), 2);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_item_file_missing_frontmatter_is_user() {
+        let e = SyncError::ItemFile(ItemFileError::MissingFrontmatter);
+        assert_eq!(classify_sync_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_item_file_utf8_is_user() {
+        // Use a runtime bytes value to construct Utf8Error without triggering
+        // the invalid_from_utf8 lint (which fires on literal invalid-UTF-8 slices).
+        let invalid_utf8: Vec<u8> = vec![0xFF, 0xFE];
+        let utf8_err = std::str::from_utf8(&invalid_utf8).unwrap_err();
+        let e = SyncError::ItemFile(ItemFileError::Utf8(utf8_err));
+        assert_eq!(classify_sync_exit_code(&e), 1);
     }
 }
