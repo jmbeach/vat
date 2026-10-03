@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn baked_template_is_non_empty() {
-        assert!(!BACKLOG_README_TEMPLATE.is_empty());
+        assert_ne!(BACKLOG_README_TEMPLATE, "");
     }
 
     // @spec CMD-INIT-006
