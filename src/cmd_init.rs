@@ -251,7 +251,7 @@ mod tests {
         let path = dir.path().join("backlog/README.md");
         assert!(path.exists(), "backlog/README.md should be created");
         let content = fs::read_to_string(&path).unwrap();
-        assert!(!content.is_empty());
+        assert_ne!(content, "");
     }
 
     // @spec CMD-INIT-006
