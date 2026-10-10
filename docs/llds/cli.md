@@ -22,15 +22,17 @@ VAT splits error handling along the boundary between *leaf modules* and *the bin
 
 ### Rendering
 
-Every command failure is rendered by its dispatcher as exactly one line on stderr:
+Every command failure goes through one helper, `fail()` in `src/main.rs`, which writes the error as the last thing on stderr and exits with the classified code:
 
 ```
 error: <message>[: <cause>]...
 ```
 
-— `anyhow`'s alternate (`{:#}`) format, which joins the cause chain with `: `. One prefix for every command keeps failures greppable and makes the error line distinguishable from warnings that may precede it on stderr. Nothing is written to stdout on failure. We don't bring in `color-eyre` or multi-line `Caused by:` blocks in v1.
+The cause chain is joined with `: `, like `anyhow`'s alternate (`{:#}`) format, with one difference: a cause whose text already appears earlier in the line is skipped. Many leaf errors both embed their source in their own message (`"vat.toml [project].id is invalid: {0}; …"`) *and* expose it via `source()`, so a plain `{:#}` prints the same text two or three times. Deduplicating at render time handles both conventions without reworking every error type.
 
-Where a leaf error variant carries enough information for a richer message, the command code matches on the variant *before* propagating and builds the friendlier text into the error itself — the dispatcher still prints it through the same `error: ` line.
+One prefix for every command keeps failures greppable and makes the error distinguishable from warnings that may precede it on stderr. The output is usually a single line, but a leaf message may itself span lines (the TOML parser's caret snippet, for example); that is kept rather than flattened. Nothing is written to stdout on failure. We don't bring in `color-eyre` or `Caused by:` blocks in v1.
+
+Where a leaf error variant carries enough information for a richer message, the command code matches on the variant *before* propagating and builds the friendlier text into the error itself — the dispatcher still prints it through `fail()`.
 
 ## Exit codes
 

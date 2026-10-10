@@ -30,9 +30,11 @@ use crate::cmd_completions::SupportedShell;
 /// Backlog subdirectory, relative to the current working directory.
 const BACKLOG_DIR: &str = "backlog";
 
+// @spec CLI-ARG-001, CLI-ARG-002, CLI-ARG-003, CLI-HELP-001, CLI-VER-001, CLI-OUT-002
 #[derive(Parser)]
 #[command(
     name = "vat",
+    version,
     about = "Versioned Addressable Tasks — backlog in plain markdown"
 )]
 struct Cli {
@@ -132,15 +134,33 @@ fn cmd_completions(shell: SupportedShell) {
     }
 }
 
-// @spec CMD-INIT-002, CMD-INIT-003, CMD-EXIT-002, CMD-EXIT-003
+// @spec CLI-ERR-001, CLI-ERR-002, CLI-ERR-003, CMD-EXIT-002, CMD-EXIT-003
+fn fail(e: &anyhow::Error) -> ! {
+    eprintln!("error: {}", render_error(e));
+    std::process::exit(classify_exit_code(e));
+}
+
+fn render_error(e: &anyhow::Error) -> String {
+    let mut msg = String::new();
+    for cause in e.chain() {
+        let text = cause.to_string();
+        if msg.contains(&text) {
+            continue;
+        }
+        if !msg.is_empty() {
+            msg.push_str(": ");
+        }
+        msg.push_str(&text);
+    }
+    msg
+}
+
+// @spec CMD-INIT-002, CMD-INIT-003
 fn cmd_init(prefix: Option<String>) {
     let prefix_str = prefix.unwrap_or_else(prompt_for_prefix);
     match cmd_init::init(std::path::Path::new("."), &prefix_str) {
         Ok(msg) => println!("{msg}"),
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(classify_exit_code(&e.into()));
-        }
+        Err(e) => fail(&e.into()),
     }
 }
 
@@ -161,12 +181,10 @@ fn prompt_for_prefix() -> String {
     input.trim().to_string()
 }
 
-// @spec CMD-EXIT-002, CMD-EXIT-003
 fn cmd_sync() {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     if let Err(e) = sync::run(backlog_dir) {
-        eprintln!("vat sync: {e}");
-        std::process::exit(classify_exit_code(&e.into()));
+        fail(&e.into());
     }
 }
 
@@ -175,10 +193,7 @@ fn cmd_start(id: &str) {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_start::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            std::process::exit(classify_exit_code(&e));
-        }
+        Err(e) => fail(&e),
     }
 }
 
@@ -187,10 +202,7 @@ fn cmd_block(id: &str, blocker_id: &str) {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_block::run(id, blocker_id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            std::process::exit(classify_exit_code(&e));
-        }
+        Err(e) => fail(&e),
     }
 }
 
@@ -199,10 +211,7 @@ fn cmd_unblock(id: &str) {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_unblock::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            std::process::exit(classify_exit_code(&e));
-        }
+        Err(e) => fail(&e),
     }
 }
 
@@ -211,10 +220,7 @@ fn cmd_done(id: &str) {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     match cmd_done::run(id, backlog_dir) {
         Ok(msg) => println!("{msg}"),
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            std::process::exit(classify_exit_code(&e));
-        }
+        Err(e) => fail(&e),
     }
 }
 
@@ -224,10 +230,7 @@ fn cmd_config_get(key: &str) {
     match cmd_config::get(key, backlog_dir) {
         Ok(Some(value)) => println!("{value}"),
         Ok(None) => {}
-        Err(e) => {
-            eprintln!("error: {e:#}");
-            std::process::exit(classify_exit_code(&e));
-        }
+        Err(e) => fail(&e),
     }
 }
 
@@ -235,8 +238,7 @@ fn cmd_config_get(key: &str) {
 fn cmd_config_set(key: &str, value: &str) {
     let backlog_dir = std::path::Path::new(BACKLOG_DIR);
     if let Err(e) = cmd_config::set(key, value, backlog_dir) {
-        eprintln!("error: {e:#}");
-        std::process::exit(classify_exit_code(&e));
+        fail(&e);
     }
 }
 
