@@ -88,6 +88,8 @@ These requirements govern the `prefix` module that validates the user-chosen pro
 - [x] **FMT-CFG-001** — `backlog/vat.toml` shall contain `[project]` with `id` set to a 3-character project-ID prefix (FMT-PFX-001), stored lowercase.
 - [x] **FMT-CFG-002** — When `vat.toml` is missing or `project.id` is invalid, the system shall abort with an error pointing the user at `vat init`.
 - [x] **FMT-CFG-003** — When writing `vat.toml`, the system shall preserve unknown sections and keys.
+- [ ] **FMT-CFG-004** — `backlog/vat.toml` may contain a `[sync]` table with `max_title_length` set to a non-negative integer (the `vat sync` title-length limit, SYNC-LEN-002). When the key is absent, or the `[sync]` table is absent or empty, the system shall use `120`.
+- [ ] **FMT-CFG-005** — When `vat.toml` is loaded by any command and `[sync]` is present but not a table, or `[sync].max_title_length` is present but is not a non-negative integer that fits the platform's `usize` (e.g. negative, a string, a float), the system shall abort with an error naming `[sync].max_title_length` and shall not point the user at `vat init`.
 
 ## Global config
 
