@@ -115,6 +115,7 @@ struct PendingWrite {
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let mut warnings = Vec::new();
     let result = run_impl(backlog_dir, &mut warnings);
+    // @spec CLI-OUT-001
     for warning in &warnings {
         eprintln!("{warning}");
     }

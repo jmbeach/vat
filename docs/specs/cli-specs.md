@@ -13,12 +13,13 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## Help and version
 
 - [x] **CLI-HELP-001** — When invoked with `--help` or `-h`, at the top level or on any subcommand, the system shall print help text to stdout and exit with code 0.
-- [ ] **CLI-VER-001** — When invoked with `--version` or `-V`, the system shall print `vat <version>` to stdout, where `<version>` is the crate version from `Cargo.toml`, and exit with code 0.
+- [x] **CLI-VER-001** — When invoked with `--version` or `-V`, the system shall print `vat <version>` to stdout, where `<version>` is the crate version from `Cargo.toml`, and exit with code 0.
 
 ## Error rendering
 
-- [ ] **CLI-ERR-001** — When a command fails, the system shall end its stderr output with exactly one line of the form `error: <message>`, where `<message>` is the error followed by each underlying cause, separated by `: `. Warnings emitted earlier in the same run may precede that line.
+- [x] **CLI-ERR-001** — When a command fails, the system shall write the error to stderr as its final output, beginning `error: ` and followed by the error message and then each underlying cause, separated by `: `. Warnings emitted earlier in the same run may precede it.
 - [x] **CLI-ERR-002** — When a command fails, the system shall write nothing to stdout.
+- [x] **CLI-ERR-003** — When rendering a failed command's error, the system shall omit any underlying cause whose text already appears earlier in the rendered message.
 
 ## Output streams
 
