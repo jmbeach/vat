@@ -126,7 +126,7 @@ mod tests {
         let mut rng = seeded_rng();
         let (new_ids, warnings) = assign_ids(&mut ids, &mut used, "foo", &mut rng).unwrap();
         assert_eq!(new_ids.len(), 1);
-        assert!(warnings.is_empty());
+        assert_eq!(warnings, [] as [String; 0]);
         assert!(ids[0].is_some());
         let id = ids[0].as_ref().unwrap();
         assert!(id.starts_with("foo-"), "id {id:?} should start with foo-");
@@ -154,7 +154,7 @@ mod tests {
         let mut rng = seeded_rng();
         let (new_ids, warnings) = assign_ids(&mut ids, &mut used, "foo", &mut rng).unwrap();
         assert_eq!(new_ids.len(), 3);
-        assert!(warnings.is_empty());
+        assert_eq!(warnings, [] as [String; 0]);
         assert!(ids.iter().all(Option::is_some));
         // All assigned IDs must be distinct.
         let id_set: HashSet<&str> = new_ids.iter().map(String::as_str).collect();
@@ -183,8 +183,8 @@ mod tests {
         let mut used = HashSet::new();
         let mut rng = seeded_rng();
         let (new_ids, warnings) = assign_ids(&mut ids, &mut used, "foo", &mut rng).unwrap();
-        assert!(new_ids.is_empty());
-        assert!(warnings.is_empty());
+        assert_eq!(new_ids, [] as [String; 0]);
+        assert_eq!(warnings, [] as [String; 0]);
     }
 
     // @spec SYNC-ID-001
@@ -292,7 +292,7 @@ mod tests {
         let mut used: HashSet<String> = ["bar-abc".to_owned()].into_iter().collect();
         let mut rng = seeded_rng();
         let (new_ids, warnings) = assign_ids(&mut ids, &mut used, "foo", &mut rng).unwrap();
-        assert!(new_ids.is_empty());
+        assert_eq!(new_ids, [] as [String; 0]);
         assert_eq!(warnings.len(), 1);
         assert!(
             warnings[0].contains("bar-abc"),
@@ -317,7 +317,7 @@ mod tests {
         let mut used: HashSet<String> = ["foo-abc".to_owned()].into_iter().collect();
         let mut rng = seeded_rng();
         let (_, warnings) = assign_ids(&mut ids, &mut used, "foo", &mut rng).unwrap();
-        assert!(warnings.is_empty());
+        assert_eq!(warnings, [] as [String; 0]);
     }
 
     // @spec SYNC-ID-006
