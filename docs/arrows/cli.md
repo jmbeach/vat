@@ -19,7 +19,7 @@ CLI shell — argument parsing, help/version, error rendering, output streams, e
 - docs/specs/commands-specs.md (CMD-EXIT-001 to 003 — exit-code classification; owned by the `commands` arrow, table described in the CLI LLD)
 
 ### Tests
-- tests/cli.rs — black-box CLI contract tests against the real binary (CLI-ARG-*, CLI-HELP-001, CLI-VER-001, CLI-ERR-*, CLI-OUT-*)
+- tests/cli.rs — black-box CLI contract tests against the real binary (CLI-ARG-*, CLI-HELP-001, CLI-VER-001, CLI-ERR-*, CLI-OUT-*), plus `init`/`sync` IO-failure → exit 2 (CMD-EXIT-003; skipped when permission checks are bypassed, e.g. as root)
 - tests/e2e_lifecycle.rs — black-box lifecycle tests (`init` → `sync` → `start` → `done`); exit codes (CMD-EXIT-001/002)
 - tests/completions.rs — black-box `vat completions <shell>` exit-code/output tests
 - src/main.rs (inline `#[cfg(test)]` — `classify_exit_code` per error variant, CMD-EXIT-002/003)

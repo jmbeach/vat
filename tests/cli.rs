@@ -286,3 +286,63 @@ fn vat_output_contains_no_ansi_escapes() {
         assert!(!out.stderr.contains(&0x1b), "stderr: {}", stderr(out));
     }
 }
+
+/// True when the process ignores permission bits (e.g. running as root), in
+/// which case permission-denied scenarios cannot be staged.
+#[cfg(unix)]
+fn permissions_bypassed(dir: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    let probe = dir.join("perm-probe");
+    std::fs::create_dir(&probe).expect("create probe dir");
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o555)).expect("chmod");
+    let bypassed = std::fs::write(probe.join("f"), "").is_ok();
+    std::fs::set_permissions(&probe, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    bypassed
+}
+
+// @spec CMD-EXIT-003, CLI-ERR-001
+#[cfg(unix)]
+#[test]
+fn init_io_failure_exits_2() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let w = World::new();
+    if permissions_bypassed(&w.xdg) {
+        eprintln!("skipped: permission checks are bypassed for this user");
+        return;
+    }
+    std::fs::set_permissions(&w.work, std::fs::Permissions::from_mode(0o555)).expect("chmod");
+    let out = w.vat(&["init", "abc"]);
+    std::fs::set_permissions(&w.work, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+    assert_eq!(out.status.code(), Some(2), "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).starts_with("error: "),
+        "stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(stdout(&out), "");
+}
+
+// @spec CMD-EXIT-003, CLI-ERR-001
+#[cfg(unix)]
+#[test]
+fn sync_io_failure_exits_2() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let w = World::initialized();
+    if permissions_bypassed(&w.xdg) {
+        eprintln!("skipped: permission checks are bypassed for this user");
+        return;
+    }
+    let toml = w.work.join("backlog/vat.toml");
+    std::fs::set_permissions(&toml, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+    let out = w.vat(&["sync"]);
+    std::fs::set_permissions(&toml, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+
+    assert_eq!(out.status.code(), Some(2), "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).starts_with("error: "),
+        "stderr: {}",
+        stderr(&out)
+    );
+    assert_eq!(stdout(&out), "");
+}

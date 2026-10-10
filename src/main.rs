@@ -257,6 +257,7 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
     use cmd_init::InitError;
     use errors::UserError;
     use id_assignment::IdAssignmentError;
+    use item_file::ItemFileError;
     use project_config::ConfigError;
     use sync::SyncError;
     use tombstone::TombstoneError;
@@ -315,12 +316,17 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
             SyncError::Version(v) => classify_cause(v),
             SyncError::Config(c) => classify_cause(c),
             SyncError::Tombstone(t) => classify_cause(t),
-            SyncError::NoBacklog | SyncError::IdAssignment(IdAssignmentError::DuplicateId(_)) => {
+            // On-disk data the user can fix by editing backlog files.
+            SyncError::NoBacklog
+            | SyncError::IdAssignment(IdAssignmentError::DuplicateId(_))
+            | SyncError::ItemFile(ItemFileError::MissingFrontmatter | ItemFileError::Utf8(_)) => {
                 Some(1)
             }
             SyncError::IdAssignment(IdAssignmentError::RetryExhausted(_))
             | SyncError::Io(_)
-            | SyncError::ItemFile(_) => Some(2),
+            | SyncError::ItemFile(ItemFileError::Io { .. } | ItemFileError::AlreadyExists(_)) => {
+                Some(2)
+            }
         };
     }
     None
@@ -336,6 +342,7 @@ mod tests {
     use crate::cmd_init::InitError;
     use crate::errors::UserError;
     use crate::id_assignment::IdAssignmentError;
+    use crate::item_file::ItemFileError;
     use crate::prefix::PrefixError;
     use crate::project_config::ConfigError;
     use crate::sync::SyncError;
@@ -585,5 +592,30 @@ mod tests {
             "foo-7k2".to_owned(),
         )));
         assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_item_file_missing_frontmatter_is_user() {
+        let e = anyhow(SyncError::ItemFile(ItemFileError::MissingFrontmatter));
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-002
+    #[test]
+    fn sync_item_file_utf8_is_user() {
+        let utf8 = String::from_utf8(vec![0xff]).unwrap_err().utf8_error();
+        let e = anyhow(SyncError::ItemFile(ItemFileError::Utf8(utf8)));
+        assert_eq!(classify_exit_code(&e), 1);
+    }
+
+    // @spec CMD-EXIT-003
+    #[test]
+    fn sync_item_file_io_error_is_internal() {
+        let e = anyhow(SyncError::ItemFile(ItemFileError::Io {
+            path: PathBuf::from("backlog/items/foo-7k2.md"),
+            source: io_err(),
+        }));
+        assert_eq!(classify_exit_code(&e), 2);
     }
 }
