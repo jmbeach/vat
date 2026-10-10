@@ -96,7 +96,12 @@ Notes content moved here from backlog.md.
 ```toml
 [project]
 id = "foo"  # 3-char prefix prepended to all IDs in this repo
+
+[sync]
+max_title_length = 120  # optional; default 120, 0 disables the check
 ```
+
+`[sync].max_title_length` keeps bullets scannable: `vat sync` refuses to ID a new bullet whose title exceeds it, pointing the user at indented notes for the extra detail. It lives in project config so every collaborator — human on the binary, agent on the skill — enforces the same limit.
 
 **`~/.config/vat/config.toml`** — global per-user config:
 
@@ -118,7 +123,7 @@ name = "jared"
 | Command | Effect |
 |---|---|
 | `vat init` | Create `backlog/`, prompt for project prefix, write `vat.toml` and an empty `backlog.md`. |
-| `vat sync` | Scan `backlog.md`. Assign IDs to bullets that lack them. Move notes-under-bullet into `items/<id>.md` (creating or appending). Normalize marker order. Does not touch dangling `[blocked-by:X]` references. |
+| `vat sync` | Scan `backlog.md`. Assign IDs to bullets that lack them. Move notes-under-bullet into `items/<id>.md` (creating or appending). Normalize marker order. Rejects new bullets whose title exceeds `[sync].max_title_length`. Does not touch dangling `[blocked-by:X]` references. |
 | `vat start <id>` | Add `[in-progress] [by:<user>]` to the matching bullet. Refuses if either marker is already present. |
 | `vat block <id> <blocker-id>` | Add `[blocked-by:<blocker-id>]` to the bullet. |
 | `vat unblock <id>` | Remove the `[blocked-by:...]` marker. |
