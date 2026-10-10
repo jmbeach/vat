@@ -4,7 +4,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Status
 
-**PARTIAL** — re-verified 2026-06-21 (HEAD `aab182c`); previously 2026-06-19 (HEAD `fe7825c`). All commands are implemented. `classify_exit_code` is wired through `cmd_config`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`. Only gap: CMD-EXIT-003 — `cmd_init` and `cmd_sync` still hardcode exit 1 for all errors.
+**OK** — verified 2026-10-10. All commands are implemented. CMD-EXIT-003 gap closed: every dispatcher, `cmd_init` and `cmd_sync` included, now fails through `fail()` → `classify_exit_code`, which classifies `InitError` and `SyncError` explicitly.
 
 ## References
 
@@ -15,9 +15,11 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 - docs/llds/commands.md
 
 ### EARS
-- docs/specs/commands-specs.md (42 active specs: all 42 marked `[x]` in the file; 4 deferred; 1 reality-adjusted gap — CMD-EXIT-003 not yet wired for cmd_init/cmd_sync)
+- docs/specs/commands-specs.md (42 active specs: 42 implemented, 0 gaps; 4 deferred)
 
 ### Tests
+- src/test_support.rs — shared `cfg(test)` helpers (`HEADER`, `make_backlog_dir`, `write_backlog`, `read_backlog`) used by `cmd_start`, `cmd_block`, `cmd_unblock`, `cmd_done`, `cmd_config`
+- src/main.rs (inline `#[cfg(test)]` — `classify_exit_code` per error variant incl. `InitError`/`SyncError`, CMD-EXIT-002/003)
 - src/cmd_config.rs (inline `#[cfg(test)]`)
 - src/cmd_init.rs (inline `#[cfg(test)]`)
 - src/cmd_start.rs (inline `#[cfg(test)]`)
@@ -43,7 +45,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Architecture
 
-**Purpose:** All VAT commands except `vat sync`. All commands are fully implemented: `vat init`, `vat start`, `vat block`, `vat unblock`, `vat done`, `vat config`, and `vat completions`. Only remaining gap: CMD-EXIT-003 not yet wired for `cmd_init` and `cmd_sync`.
+**Purpose:** All VAT commands except `vat sync`. All commands are fully implemented: `vat init`, `vat start`, `vat block`, `vat unblock`, `vat done`, `vat config`, and `vat completions`.
 
 **Key Components:**
 1. `src/main.rs` — dispatch for all commands; `prompt_for_prefix()` for CMD-INIT-003; `classify_exit_code()` (CMD-EXIT-001 to 003)
@@ -68,10 +70,10 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 | `vat done` | CMD-DONE-001 to 005 | 5 | 0 | 0 |
 | `vat config` | CMD-CFG-001 to 006 | 6 | 0 | 0 |
 | `vat completions` | CMD-COMP-001 to 005 | 5 | 0 | 0 |
-| Exit codes | CMD-EXIT-001 to 003 | 2 | 0 | 1 |
+| Exit codes | CMD-EXIT-001 to 003 | 3 | 0 | 0 |
 | Deferred | CMD-LOCK-001, CMD-FORCE-001, CMD-DRYRUN-001, CMD-INIT-ADOPT-001 | 0 | 4 | 0 |
 
-**Summary:** 41 of 42 active specs implemented; 4 deferred; 1 gap (CMD-EXIT-003). Note: `commands-specs.md` marks CMD-EXIT-003 `[x]`, but it is counted as a gap here because `cmd_init` and `cmd_sync` exit 1 for all errors (see Key Finding #5 and the `commands` drift entry in `index.yaml`).
+**Summary:** 42 of 42 active specs implemented; 4 deferred; 0 gaps.
 
 ## Key Findings
 
@@ -83,11 +85,10 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 4. **`vat block` fully implemented** — `src/cmd_block.rs` implements CMD-BLOCK-001 to 006 with full inline tests. Self-block guard (CMD-BLOCK-001) fires before any file read. Blocker validation (CMD-BLOCK-002/002a) requires a well-formed bullet, mirroring the target-id handling (CMD-CC-004). Idempotent re-block (CMD-BLOCK-003) is a no-op without writing. Replace-existing-blocker (CMD-BLOCK-004) and add-when-absent (CMD-BLOCK-005) set `Bullet.blocked_by` and re-serialize; CMD-BLOCK-006 explicitly allows cycles. The `find_entry_index` helper and `Bullet`/`ParsedRegion` machinery already proven by `cmd_start`, `cmd_unblock`, and `cmd_done` are reused unchanged.
 
-5. **Exit-code framework (CMD-EXIT-001 to 003) wired for all commands except cmd_init and cmd_sync** — `classify_exit_code()` at `src/main.rs` chain-searches the anyhow error for typed variants (`ConfigError`, `UserConfigError`, `UnsupportedVersion`, `UserError`) and maps them to exit 1 (user-facing) or 2 (internal). `UserError` in `src/errors.rs` lifts untyped `bail!` messages into the classification scheme. Unit tests in `src/main.rs`; all three exit codes are `@spec`-annotated. **Partial coverage:** `classify_exit_code` is now wired through `cmd_config_get`/`cmd_config_set`, `cmd_start`, `cmd_block`, `cmd_unblock`, and `cmd_done`; `cmd_init` and `cmd_sync` still hardcode exit 1 for all errors. `commands-specs.md` marks CMD-EXIT-003 `[x]` but this reflects an aspirational marker — the gap persists.
+5. **Exit-code framework (CMD-EXIT-001 to 003) wired for every command** — `classify_exit_code()` in `src/main.rs` returns the first classification any link of the error chain makes (`ConfigError`, `UserConfigError`, `TombstoneError`, `UnsupportedVersion`, `UserError`, `InitError`, `SyncError`), defaulting to 2. `InitError::AlreadyInitialized` and `SyncError::NoBacklog` are user errors (1). `SyncError`'s `#[error(transparent)]` variants hide the wrapped error from the chain, so they are unwrapped directly; `DuplicateId` and item-file data errors (`MissingFrontmatter`, `Utf8`) are 1; `RetryExhausted` and IO errors are 2. Rendering and exit go through `fail()` (CLI-ERR-*; see the `cli` arrow).
 
 6. **Shell completions (`vat completions`) added** — `src/cmd_completions.rs` implements CMD-COMP-001 to 005 via `clap_complete`. The `Completions` subcommand is hidden from `vat --help` (CMD-COMP-003) via `#[command(hide = true)]` in `src/main.rs`; `visible_command()` rebuilds the CLI tree without hidden subcommands so generated scripts don't advertise it. Supported shells are exactly bash/zsh/fish (CMD-COMP-002) — narrower than `clap_complete`'s built-in set. Write failures propagate rather than panic (CMD-COMP-005); broken pipe is swallowed silently. CMD-COMP-004 (invalid shell → exit 2 usage error) is handled automatically by clap's `ValueEnum` constraint.
 
 ## Work Required
 
-### Should Fix
-1. Thread `classify_exit_code` through `cmd_init` and `cmd_sync` so CMD-EXIT-003 applies to every command. Both still hardcode `std::process::exit(1)` for all errors; IO failures in these two commands currently exit 1 (user-facing) instead of 2 (internal).
+None — all active specs implemented.
