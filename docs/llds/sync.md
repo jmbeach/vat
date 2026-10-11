@@ -99,13 +99,13 @@ The check exists to keep `backlog.md` scannable: a bullet is a one-line handle, 
 - **What is measured: the measured title.** A plain text rule on the raw bullet line, independent of the marker parser, so the binary and the skill count identically:
   1. Drop the leading `- ` bullet marker.
   2. Remove every `[...]` span anywhere on the line — a `[` through the next `]`. Every bracketed group counts as a tag, recognized marker or not: `[vat-7k2]`, `[in-progress]`, `[by:jared]`, `[TODO]`, `[P1]`, the text half of a markdown link. An unmatched `[` (no later `]`) is ordinary text.
-  3. Remove a trailing `(see ./items/<anything>.md)` pointer.
+  3. Remove a `(see ./items/<anything>.md)` pointer followed only by whitespace.
   4. Trim leading and trailing whitespace. Interior whitespace counts as written (removing a mid-line tag can leave a double space; that is one extra char, not worth a rule).
   5. Count what's left.
 
   Excluding every tag and the pointer means VAT's own decorations — `[id]` from sync, `[in-progress] [by:<name>]` from `vat start`, the pointer suffix from sync — never push a passing bullet over the limit, and a bullet whose `[id]` was demoted behind an unknown tag (`- [TODO] [vat-7k2] title`) measures the same as before.
 
-  Examples (all measure as `Fix sync`, 8 chars): `- Fix sync`, `- [TODO] Fix sync`, `- [vat-7k2] [in-progress] [by:jared] Fix sync (see ./items/vat-7k2.md)`.
+  Examples (all measure as `Fix sync`, 8 chars): `- Fix sync`, `- [TODO] Fix sync`, `- [ ] Fix sync`, `- [vat-7k2] [in-progress] [by:jared] Fix sync (see ./items/vat-7k2.md)`. A tag-only bullet (`- [TODO]`) is well-formed (the parser's title is `[TODO]`) and measures 0, so it passes. A markdown link `[docs](https://…)` loses its `[docs]` but keeps its `(https://…)`, which counts — long URLs belong in notes anyway.
 - **Units: chars.** Unicode scalar values, so a non-ASCII title is not penalized for its UTF-8 width. No grapheme clustering — the limit is a scannability heuristic, not a typesetting rule.
 - **Boundary.** A measured title of exactly `max_title_length` chars passes; `max_title_length + 1` fails.
 - **Who is checked: bullets without an `[id]`.** Already-ID'd bullets are grandfathered, so upgrading VAT (or lowering the limit) never stops an existing backlog from syncing. Raising or lowering the limit only affects bullets captured afterward.

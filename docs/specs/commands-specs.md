@@ -58,7 +58,10 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **CMD-CFG-003** — `vat config set user.name <value>` shall write the value to the user config, creating the file and parent directories if needed.
 - [x] **CMD-CFG-004** — `vat config set project.id <value>` shall validate `<value>` as 3 ASCII alphanumeric characters (FMT-PFX-001).
 - [x] **CMD-CFG-005** — `vat config set project.id <value>` shall abort with an error if any IDs in `backlog.md` or `backlog/.used-ids` use a different prefix.
-- [x] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name` and `project.id` with an error.
+- [ ] **CMD-CFG-006** — `vat config set` shall reject keys other than `user.name`, `project.id`, and `sync.max_title_length` with an error.
+- [ ] **CMD-CFG-007** — `vat config get sync.max_title_length` shall print the effective title-length limit from `backlog/vat.toml` to stdout and exit 0: the configured value, or `120` when `[sync].max_title_length` is unset (FMT-CFG-004).
+- [ ] **CMD-CFG-008** — `vat config set sync.max_title_length <value>` shall accept only a non-negative decimal integer that fits the platform's `usize`; for any other value it shall abort with an error naming the key and shall not write to any file.
+- [ ] **CMD-CFG-009** — When `vat config set sync.max_title_length <value>` succeeds, the system shall write `[sync] max_title_length = <value>` to `backlog/vat.toml` as a TOML integer, creating the `[sync]` table when absent and preserving all other sections and keys (FMT-CFG-003).
 
 ## `vat completions <shell>`
 
