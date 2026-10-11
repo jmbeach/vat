@@ -35,6 +35,23 @@ pub(crate) enum SyncError {
     Io(#[from] io::Error),
     #[error(transparent)]
     ItemFile(#[from] item_file::ItemFileError),
+    // @spec SYNC-LEN-002
+    #[error("title-length check not implemented")]
+    TitleTooLong {
+        limit: usize,
+        offenders: Vec<TitleOffender>,
+    },
+}
+
+/// One new bullet whose measured title exceeds the limit (SYNC-LEN-003).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TitleOffender {
+    /// 1-based position among all task bullets, malformed ones included.
+    pub(crate) position: usize,
+    /// Measured title length in chars.
+    pub(crate) length: usize,
+    /// The measured title (untruncated).
+    pub(crate) title: String,
 }
 
 /// Whether [`run`] wrote `backlog.md` or skipped the write because the
@@ -1237,5 +1254,222 @@ mod tests {
         assert_eq!(outcome, SyncOutcome::Wrote);
         assert_eq!(read_backlog(&dir), "- [vat-t1h] Title\n");
         assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Skipped);
+    }
+
+    // ── SYNC-LEN-*: title-length check on new bullets ───────────────────────
+
+    /// Like [`setup`], but with `[sync] max_title_length = <limit>`.
+    fn setup_with_limit(limit: usize) -> TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            dir.path().join("vat.toml"),
+            format!("[project]\nid = \"vat\"\n\n[sync]\nmax_title_length = {limit}\n"),
+        )
+        .expect("write vat.toml");
+        dir
+    }
+
+    fn title_too_long(err: &SyncError) -> (usize, &[super::TitleOffender]) {
+        match err {
+            SyncError::TitleTooLong { limit, offenders } => (*limit, offenders.as_slice()),
+            other => panic!("expected TitleTooLong, got {other:?}"),
+        }
+    }
+
+    // @spec SYNC-LEN-002
+    #[test]
+    fn run_aborts_on_new_bullet_over_default_limit_and_writes_nothing() {
+        let dir = setup();
+        let input = format!("- {}\n  some notes\n", "a".repeat(121));
+        write_backlog(&dir, &input);
+        let err = run(dir.path()).unwrap_err();
+        let (limit, offenders) = title_too_long(&err);
+        assert_eq!(limit, 120);
+        assert_eq!(offenders.len(), 1);
+        assert_eq!(read_backlog(&dir), input, "backlog.md untouched");
+        assert!(
+            !dir.path().join(".used-ids").exists(),
+            "no tombstone append"
+        );
+        assert!(!dir.path().join("items").exists(), "no item file");
+    }
+
+    // @spec SYNC-LEN-002
+    #[test]
+    fn run_accepts_new_bullet_exactly_at_limit() {
+        let dir = setup();
+        write_backlog(&dir, &format!("- {}\n", "a".repeat(120)));
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Wrote);
+        assert!(
+            read_backlog(&dir).starts_with("- [vat-"),
+            "bullet got an id"
+        );
+    }
+
+    // @spec SYNC-LEN-001, SYNC-LEN-002
+    #[test]
+    fn run_counts_chars_not_bytes() {
+        let dir = setup();
+        // 120 chars, 240 bytes.
+        write_backlog(&dir, &format!("- {}\n", "é".repeat(120)));
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Wrote);
+    }
+
+    // @spec SYNC-LEN-001, SYNC-LEN-002
+    #[test]
+    fn run_excludes_tags_and_pointer_from_length() {
+        let dir = setup();
+        let title = "a".repeat(120);
+        write_backlog(
+            &dir,
+            &format!("- [TODO] [P1] {title} (see ./items/vat-zzz.md)\n"),
+        );
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Wrote);
+    }
+
+    // @spec SYNC-LEN-002
+    #[test]
+    fn run_uses_configured_limit() {
+        let dir = setup_with_limit(10);
+        write_backlog(&dir, "- Short one\n- Eleven char\n");
+        let err = run(dir.path()).unwrap_err();
+        let (limit, offenders) = title_too_long(&err);
+        assert_eq!(limit, 10);
+        assert_eq!(offenders.len(), 1);
+        assert_eq!(offenders[0].position, 2);
+        assert_eq!(offenders[0].length, 11);
+    }
+
+    // @spec SYNC-LEN-003
+    #[test]
+    fn run_reports_every_offender_with_position_counting_malformed_bullets() {
+        let dir = setup();
+        let long_a = "a".repeat(130);
+        let long_b = "b".repeat(125);
+        // Bullet #1 is malformed (no title) and still counts for numbering.
+        write_backlog(
+            &dir,
+            &format!(
+                "- [vat-t1h]\n- fine\n- {long_a}\n- [vat-g5y] {}\n- {long_b}\n",
+                "c".repeat(200)
+            ),
+        );
+        let err = run(dir.path()).unwrap_err();
+        let (_, offenders) = title_too_long(&err);
+        let summary: Vec<(usize, usize)> =
+            offenders.iter().map(|o| (o.position, o.length)).collect();
+        // Bullet #4 already has an id, so it is not checked (SYNC-LEN-005).
+        assert_eq!(summary, vec![(3, 130), (5, 125)]);
+        assert_eq!(offenders[0].title, long_a);
+    }
+
+    // @spec SYNC-LEN-003
+    #[test]
+    fn title_too_long_message_lists_offenders_with_truncated_titles() {
+        let dir = setup();
+        let long = format!("{}{}", "x".repeat(80), "Q".repeat(70));
+        write_backlog(&dir, &format!("- ok\n- {long}\n"));
+        let msg = run(dir.path()).unwrap_err().to_string();
+        assert!(
+            msg.contains("bullet #2 (150 chars)"),
+            "names position and length: {msg}"
+        );
+        let shown = format!("\"{}…\"", "x".repeat(80));
+        assert!(
+            msg.contains(&shown),
+            "first 80 chars + ellipsis, quoted: {msg}"
+        );
+        assert!(!msg.contains("QQ"), "text past 80 chars is cut: {msg}");
+    }
+
+    // @spec SYNC-LEN-003
+    #[test]
+    fn title_too_long_message_does_not_truncate_short_titles() {
+        let dir = setup_with_limit(5);
+        write_backlog(&dir, "- abcdefg\n");
+        let msg = run(dir.path()).unwrap_err().to_string();
+        assert!(msg.contains("\"abcdefg\""), "{msg}");
+        assert!(!msg.contains('…'), "{msg}");
+    }
+
+    // @spec SYNC-LEN-004
+    #[test]
+    fn title_too_long_message_teaches_the_fix() {
+        let dir = setup();
+        write_backlog(&dir, &format!("- {}\n", "a".repeat(121)));
+        let msg = run(dir.path()).unwrap_err().to_string();
+        assert!(!msg.starts_with("error:"), "the CLI adds the prefix: {msg}");
+        assert!(msg.contains("120"), "states the limit: {msg}");
+        assert!(
+            msg.contains("[sync].max_title_length"),
+            "names the key: {msg}"
+        );
+        assert!(
+            msg.contains("backlog/items/<id>.md"),
+            "explains extraction: {msg}"
+        );
+        // An example bullet followed by an indented note line.
+        let lines: Vec<&str> = msg.lines().collect();
+        assert!(
+            lines.windows(2).any(|w| w[0].trim_start().starts_with("- ")
+                && w[1].len() - w[1].trim_start().len() > w[0].len() - w[0].trim_start().len()),
+            "shows a bullet with indented notes beneath it: {msg}"
+        );
+    }
+
+    // @spec SYNC-LEN-004
+    #[test]
+    fn title_too_long_header_agrees_in_number() {
+        let dir = setup_with_limit(3);
+        write_backlog(&dir, "- abcd\n");
+        let one = run(dir.path()).unwrap_err().to_string();
+        assert!(
+            one.lines()
+                .next()
+                .unwrap()
+                .contains("1 new bullet has a title"),
+            "{one}"
+        );
+
+        write_backlog(&dir, "- abcd\n- efgh\n");
+        let two = run(dir.path()).unwrap_err().to_string();
+        assert!(
+            two.lines()
+                .next()
+                .unwrap()
+                .contains("2 new bullets have titles"),
+            "{two}"
+        );
+    }
+
+    // @spec SYNC-LEN-005
+    #[test]
+    fn run_does_not_check_bullets_that_already_have_an_id() {
+        let dir = setup();
+        let input = format!("- [vat-t1h] {}\n", "a".repeat(300));
+        write_backlog(&dir, &input);
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Skipped);
+        assert_eq!(read_backlog(&dir), input);
+    }
+
+    // @spec SYNC-LEN-006
+    #[test]
+    fn run_skips_check_when_limit_is_zero() {
+        let dir = setup_with_limit(0);
+        write_backlog(&dir, &format!("- {}\n", "a".repeat(500)));
+        assert_eq!(run(dir.path()).unwrap(), SyncOutcome::Wrote);
+        assert!(read_backlog(&dir).starts_with("- [vat-"));
+    }
+
+    // @spec SYNC-LEN-009
+    #[test]
+    fn run_reports_title_length_before_duplicate_id() {
+        let dir = setup();
+        write_backlog(
+            &dir,
+            &format!("- [vat-t1h] one\n- [vat-t1h] two\n- {}\n", "a".repeat(121)),
+        );
+        let err = run(dir.path()).unwrap_err();
+        title_too_long(&err);
     }
 }

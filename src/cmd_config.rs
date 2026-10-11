@@ -481,4 +481,105 @@ mod tests {
         assert!(!ids_exist_with_prefix("bar", &backlog).unwrap());
         assert!(ids_exist_with_prefix("baz", &backlog).unwrap());
     }
+
+    // -----------------------------------------------------------------------
+    // CMD-CFG-006..009 — sync.max_title_length
+    // -----------------------------------------------------------------------
+
+    // @spec CMD-CFG-007
+    #[test]
+    fn get_max_title_length_prints_default_when_unset() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_vat_toml(&backlog, "vat");
+        let cfg_path = dir.path().join("user_config.toml");
+
+        let result = get_impl("sync.max_title_length", &backlog, &cfg_path).unwrap();
+        assert_eq!(result, Some("120".to_owned()));
+    }
+
+    // @spec CMD-CFG-007
+    #[test]
+    fn get_max_title_length_prints_configured_value() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        fs::write(
+            backlog.join("vat.toml"),
+            "[project]\nid = \"vat\"\n\n[sync]\nmax_title_length = 80\n",
+        )
+        .unwrap();
+        let cfg_path = dir.path().join("user_config.toml");
+
+        let result = get_impl("sync.max_title_length", &backlog, &cfg_path).unwrap();
+        assert_eq!(result, Some("80".to_owned()));
+    }
+
+    // @spec CMD-CFG-006, CMD-CFG-009
+    #[test]
+    fn set_max_title_length_writes_integer_and_preserves_other_keys() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        fs::write(
+            backlog.join("vat.toml"),
+            "[project]\nid = \"vat\"\nextra = \"keep\"\n\n[other]\nk = 1\n",
+        )
+        .unwrap();
+        let cfg_path = dir.path().join("user_config.toml");
+
+        set_impl("sync.max_title_length", "80", &backlog, &cfg_path).unwrap();
+
+        let raw: toml::Value = fs::read_to_string(backlog.join("vat.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            raw.get("sync").and_then(|t| t.get("max_title_length")),
+            Some(&toml::Value::Integer(80)),
+            "written as a TOML integer under [sync]"
+        );
+        assert_eq!(raw["project"]["id"].as_str(), Some("vat"));
+        assert_eq!(raw["project"]["extra"].as_str(), Some("keep"));
+        assert_eq!(raw["other"]["k"].as_integer(), Some(1));
+    }
+
+    // @spec CMD-CFG-009
+    #[test]
+    fn set_max_title_length_overwrites_existing_value() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        fs::write(
+            backlog.join("vat.toml"),
+            "[project]\nid = \"vat\"\n\n[sync]\nmax_title_length = 80\n",
+        )
+        .unwrap();
+        let cfg_path = dir.path().join("user_config.toml");
+
+        set_impl("sync.max_title_length", "0", &backlog, &cfg_path).unwrap();
+        let result = get_impl("sync.max_title_length", &backlog, &cfg_path).unwrap();
+        assert_eq!(result, Some("0".to_owned()));
+    }
+
+    // @spec CMD-CFG-008
+    #[test]
+    fn set_max_title_length_rejects_invalid_values_without_writing() {
+        let dir = TempDir::new().unwrap();
+        let backlog = make_backlog_dir(&dir);
+        write_vat_toml(&backlog, "vat");
+        let before = fs::read_to_string(backlog.join("vat.toml")).unwrap();
+        let cfg_path = dir.path().join("user_config.toml");
+
+        for bad in ["-1", "abc", "1.5", "", " 80", "99999999999999999999999"] {
+            let err = set_impl("sync.max_title_length", bad, &backlog, &cfg_path)
+                .expect_err(&format!("{bad:?} should be rejected"));
+            assert!(
+                format!("{err:#}").contains("sync.max_title_length"),
+                "{bad:?}: error names the key: {err:#}"
+            );
+            assert_eq!(
+                fs::read_to_string(backlog.join("vat.toml")).unwrap(),
+                before,
+                "{bad:?}: vat.toml unchanged"
+            );
+        }
+    }
 }

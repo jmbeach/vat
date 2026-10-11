@@ -72,6 +72,11 @@ impl ProjectConfig {
         &self.project_id
     }
 
+    /// The effective `[sync].max_title_length` (FMT-CFG-004); `0` disables.
+    pub(crate) fn max_title_length(&self) -> usize {
+        todo!("FMT-CFG-004")
+    }
+
     // @spec FMT-CFG-001
     pub(crate) fn set_project_id(&mut self, id: &str) -> Result<(), ConfigError> {
         let normalized = validate_and_normalize(id)?;
@@ -359,5 +364,68 @@ mod tests {
         let mut cfg = parse(input).unwrap();
         assert!(cfg.set_project_id("bad-id").is_err());
         assert_eq!(cfg.project_id(), "bar");
+    }
+
+    // ── FMT-CFG-004/005: [sync].max_title_length ──────────────────────────
+
+    // @spec FMT-CFG-004
+    #[test]
+    fn max_title_length_defaults_to_120_when_sync_table_absent() {
+        let cfg = parse("[project]\nid = \"vat\"\n").unwrap();
+        assert_eq!(cfg.max_title_length(), 120);
+    }
+
+    // @spec FMT-CFG-004
+    #[test]
+    fn max_title_length_defaults_to_120_when_sync_table_empty() {
+        let cfg = parse("[project]\nid = \"vat\"\n\n[sync]\n").unwrap();
+        assert_eq!(cfg.max_title_length(), 120);
+    }
+
+    // @spec FMT-CFG-004
+    #[test]
+    fn max_title_length_reads_configured_value() {
+        let cfg = parse("[project]\nid = \"vat\"\n\n[sync]\nmax_title_length = 80\n").unwrap();
+        assert_eq!(cfg.max_title_length(), 80);
+    }
+
+    // @spec FMT-CFG-004
+    #[test]
+    fn max_title_length_accepts_zero() {
+        let cfg = parse("[project]\nid = \"vat\"\n\n[sync]\nmax_title_length = 0\n").unwrap();
+        assert_eq!(cfg.max_title_length(), 0);
+    }
+
+    // @spec FMT-CFG-004, FMT-CFG-003
+    #[test]
+    fn unknown_sync_keys_are_ignored_and_preserved() {
+        let cfg = parse("[project]\nid = \"vat\"\n\n[sync]\nmax_title_len = 80\n").unwrap();
+        assert_eq!(
+            cfg.max_title_length(),
+            120,
+            "misspelled key falls back to default"
+        );
+        assert!(cfg.serialize().contains("max_title_len = 80"));
+    }
+
+    // @spec FMT-CFG-005
+    #[test]
+    fn parse_rejects_invalid_max_title_length_naming_the_key() {
+        for bad in [
+            "[sync]\nmax_title_length = -1\n",
+            "[sync]\nmax_title_length = \"120\"\n",
+            "[sync]\nmax_title_length = 120.0\n",
+            "[sync]\nmax_title_length = true\n",
+            "sync = 5\n",
+        ] {
+            let input = format!("{bad}[project]\nid = \"vat\"\n");
+            let err = parse(&input).expect_err(&format!("should reject {bad:?}"));
+            let msg = err.to_string();
+            assert!(
+                msg.contains("[sync].max_title_length"),
+                "{bad:?}: error names the key: {msg}"
+            );
+            assert!(!msg.contains("vat init"), "{bad:?}: no init pointer: {msg}");
+        }
     }
 }

@@ -18,6 +18,7 @@ mod readme_template;
 mod sync;
 #[cfg(test)]
 mod test_support;
+mod title_length;
 mod tombstone;
 mod user_config;
 
@@ -318,6 +319,7 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
             SyncError::Tombstone(t) => classify_cause(t),
             // On-disk data the user can fix by editing backlog files.
             SyncError::NoBacklog
+            | SyncError::TitleTooLong { .. }
             | SyncError::IdAssignment(IdAssignmentError::DuplicateId(_))
             | SyncError::ItemFile(ItemFileError::MissingFrontmatter | ItemFileError::Utf8(_)) => {
                 Some(1)
