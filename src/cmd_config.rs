@@ -1,4 +1,5 @@
 // @spec CMD-CFG-001, CMD-CFG-002, CMD-CFG-003, CMD-CFG-004, CMD-CFG-005, CMD-CFG-006
+// @spec CMD-CFG-007, CMD-CFG-008, CMD-CFG-009
 
 use std::path::Path;
 
@@ -14,14 +15,14 @@ use crate::user_config::{self, UserConfig, UserConfigError};
 /// Returns the value for `key`, or `None` when the key is valid but unset.
 ///
 /// Returns `Err` for parse failures or unknown keys.
-// @spec CMD-CFG-001, CMD-CFG-002
+// @spec CMD-CFG-001, CMD-CFG-002, CMD-CFG-007
 pub(crate) fn get(key: &str, backlog_dir: &Path) -> anyhow::Result<Option<String>> {
     let user_cfg_path = user_config::config_path()?;
     get_impl(key, backlog_dir, &user_cfg_path)
 }
 
 /// Sets `key` to `value`.
-// @spec CMD-CFG-003, CMD-CFG-004, CMD-CFG-005, CMD-CFG-006
+// @spec CMD-CFG-003, CMD-CFG-004, CMD-CFG-005, CMD-CFG-006, CMD-CFG-008, CMD-CFG-009
 pub(crate) fn set(key: &str, value: &str, backlog_dir: &Path) -> anyhow::Result<()> {
     let user_cfg_path = user_config::config_path()?;
     set_impl(key, value, backlog_dir, &user_cfg_path)
@@ -39,6 +40,15 @@ fn get_impl(key: &str, backlog_dir: &Path, user_cfg_path: &Path) -> anyhow::Resu
             let vat_toml = backlog_dir.join("vat.toml");
             match project_config::load(&vat_toml) {
                 Ok(cfg) => Ok(Some(cfg.project_id().to_owned())),
+                Err(ConfigError::NotFound(_)) => Ok(None),
+                Err(e) => Err(anyhow::Error::from(e).context("reading vat.toml")),
+            }
+        }
+        // CMD-CFG-007: the effective limit — the default when unset.
+        "sync.max_title_length" => {
+            let vat_toml = backlog_dir.join("vat.toml");
+            match project_config::load(&vat_toml) {
+                Ok(cfg) => Ok(Some(cfg.max_title_length().to_string())),
                 Err(ConfigError::NotFound(_)) => Ok(None),
                 Err(e) => Err(anyhow::Error::from(e).context("reading vat.toml")),
             }
@@ -89,6 +99,21 @@ fn set_impl(
             }
             cfg.set_project_id(&new_prefix)
                 .context("invalid project.id")?;
+            cfg.save(&vat_toml).context("saving vat.toml")?;
+            Ok(())
+        }
+        "sync.max_title_length" => {
+            // CMD-CFG-008: validate before touching anything.
+            let invalid = || {
+                UserError(format!(
+                    "invalid sync.max_title_length {value:?}: must be a non-negative integer"
+                ))
+            };
+            let limit: usize = value.parse().map_err(|_| invalid())?;
+            let vat_toml = backlog_dir.join("vat.toml");
+            // Like project.id, requires `vat init` first.
+            let mut cfg = project_config::load(&vat_toml).context("reading vat.toml")?;
+            cfg.set_max_title_length(limit).map_err(|_| invalid())?;
             cfg.save(&vat_toml).context("saving vat.toml")?;
             Ok(())
         }

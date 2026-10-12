@@ -81,7 +81,7 @@ Reuses the shared parse-mutate-emit machinery wired into `sync` by vat-v3k — `
 - Supported keys: `user.name`, `project.id`, `sync.max_title_length`.
 - `user.name` reads from global config; `project.id` and `sync.max_title_length` read from `backlog/vat.toml`.
 - `sync.max_title_length` prints the *effective* value — the configured integer, or `120` when unset. Unlike the other keys it is never "unset" from a reader's point of view, because sync always enforces some limit (or `0`, disabled).
-- Print the value to stdout, or print nothing and exit non-zero if unset.
+- Print the value to stdout and exit 0; for `user.name` and `project.id`, print nothing and exit 0 if unset (CMD-CFG-001/002). Exit 1 only on hard errors (unknown key, invalid config).
 
 ## `vat config set <key> <value>`
 

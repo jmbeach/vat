@@ -5,9 +5,40 @@
 pub(crate) const DEFAULT_MAX_TITLE_LENGTH: usize = 120;
 
 /// The text of a raw bullet line that counts toward the title-length limit.
+///
+/// Drops the leading `-` bullet marker, every `[...]` span (recognized marker
+/// or not), and a `(see ./items/<anything>.md)` pointer followed only by
+/// whitespace, then trims. Deliberately independent of the marker parser so
+/// the binary and the skill's prose procedure count identically.
+// @spec SYNC-LEN-001
 pub(crate) fn measured_title(bullet_line: &str) -> String {
-    let _ = bullet_line;
-    todo!("SYNC-LEN-001")
+    let body = bullet_line.trim_start();
+    let body = body.strip_prefix('-').unwrap_or(body);
+
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(open) = rest.find('[') {
+        match rest[open..].find(']') {
+            Some(close) => {
+                out.push_str(&rest[..open]);
+                rest = &rest[open + close + 1..];
+            }
+            // An unmatched `[` is ordinary text.
+            None => break,
+        }
+    }
+    out.push_str(rest);
+
+    let trimmed = out.trim_end();
+    let trimmed = strip_pointer(trimmed).unwrap_or(trimmed);
+    trimmed.trim().to_owned()
+}
+
+/// `s` without a trailing `(see ./items/<anything>.md)`, if it ends with one.
+fn strip_pointer(s: &str) -> Option<&str> {
+    let without_close = s.strip_suffix(".md)")?;
+    let open = without_close.rfind("(see ./items/")?;
+    Some(&s[..open])
 }
 
 #[cfg(test)]

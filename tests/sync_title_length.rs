@@ -103,9 +103,7 @@ fn sync_over_limit_exits_1_and_leaves_files_untouched() {
     assert!(!err.contains("error: error:"), "single error prefix: {err}");
     assert_eq!(w.read("backlog.md"), before);
     assert!(
-        fs::read_dir(w.backlog().join("items"))
-            .map(|d| d.count() == 0)
-            .unwrap_or(true),
+        fs::read_dir(w.backlog().join("items")).map_or(true, |d| d.count() == 0),
         "no item files written"
     );
     assert_eq!(
@@ -170,7 +168,9 @@ fn config_get_prints_effective_limit() {
 
 // @spec FMT-CFG-005
 #[test]
-fn invalid_limit_in_vat_toml_fails_every_command_naming_the_key() {
+fn invalid_limit_in_vat_toml_fails_every_command_that_loads_it() {
+    // Only commands that read vat.toml (sync, config get/set on project keys)
+    // are affected; start/block/unblock/done never load project config.
     let w = World::initialized();
     w.write_bullets("- [abc-t1h] a task\n");
     let toml = w.read("vat.toml");
@@ -181,7 +181,7 @@ fn invalid_limit_in_vat_toml_fails_every_command_naming_the_key() {
 
     for args in [
         &["sync"][..],
-        &["start", "abc-t1h"][..],
+        &["config", "get", "sync.max_title_length"][..],
         &["config", "get", "project.id"][..],
     ] {
         let out = w.vat(args);

@@ -8,6 +8,7 @@
 
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
@@ -15,7 +16,7 @@ use thiserror::Error;
 
 use crate::backlog_file::{BacklogFile, ParsedRegion, UnsupportedVersion, check_version};
 use crate::bullet::{Bullet, BulletError};
-use crate::{file_io, id_assignment, item_file, project_config, tombstone};
+use crate::{file_io, id_assignment, item_file, project_config, title_length, tombstone};
 
 #[derive(Debug, Error)]
 pub(crate) enum SyncError {
@@ -35,12 +36,46 @@ pub(crate) enum SyncError {
     Io(#[from] io::Error),
     #[error(transparent)]
     ItemFile(#[from] item_file::ItemFileError),
-    // @spec SYNC-LEN-002
-    #[error("title-length check not implemented")]
+    // @spec SYNC-LEN-002, SYNC-LEN-003, SYNC-LEN-004
+    #[error("{}", render_title_too_long(*limit, offenders))]
     TitleTooLong {
         limit: usize,
         offenders: Vec<TitleOffender>,
     },
+}
+
+/// Offender titles longer than this are cut in the error (SYNC-LEN-003).
+const OFFENDER_TITLE_PREVIEW_CHARS: usize = 80;
+
+/// The `TitleTooLong` message: every offender, then how to fix it. No
+/// `error:` prefix — the CLI adds that.
+fn render_title_too_long(limit: usize, offenders: &[TitleOffender]) -> String {
+    let n = offenders.len();
+    let mut out = if n == 1 {
+        format!("1 new bullet has a title longer than {limit} characters")
+    } else {
+        format!("{n} new bullets have titles longer than {limit} characters")
+    };
+    out.push_str(" (backlog/vat.toml [sync].max_title_length):\n");
+    for o in offenders {
+        let mut preview: String = o.title.chars().take(OFFENDER_TITLE_PREVIEW_CHARS).collect();
+        if o.length > OFFENDER_TITLE_PREVIEW_CHARS {
+            preview.push('…');
+        }
+        let _ = writeln!(
+            out,
+            "  bullet #{} ({} chars): {preview:?}",
+            o.position, o.length
+        );
+    }
+    out.push_str(
+        "\nKeep the bullet to a short title and put the detail in indented notes beneath it:\n\
+         \n  - Speed up sync on large backlogs\n\
+         \x20   Probably the per-run item-file scan; profile with 5k bullets.\n\
+         \x20   Compare timings before and after.\n\
+         \n`vat sync` moves the indented notes into backlog/items/<id>.md and links the bullet to it.",
+    );
+    out
 }
 
 /// One new bullet whose measured title exceeds the limit (SYNC-LEN-003).
@@ -128,6 +163,7 @@ struct PendingWrite {
 // @spec SYNC-WRITE-001, SYNC-WRITE-002, SYNC-WRITE-003, SYNC-WRITE-004
 // @spec SYNC-ID-004
 // @spec SYNC-MARK-001, SYNC-MARK-002, SYNC-MARK-003, SYNC-MARK-004
+// @spec SYNC-LEN-002, SYNC-LEN-008, SYNC-LEN-009
 // @spec FMT-PARSE-006
 pub(crate) fn run(backlog_dir: &Path) -> Result<SyncOutcome, SyncError> {
     let mut warnings = Vec::new();
@@ -169,6 +205,10 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
     // are fully inert: an ID-shaped token on one does not seed the collision
     // set and does not count for duplicate detection (LLD "Decisions").
     let mut parsed: Vec<Option<Bullet>> = Vec::with_capacity(region.entries.len());
+    // Parse-step warnings, in bullet order, flagged `true` when they report a
+    // dropped [blocked-by:] — those are withheld if the run aborts on title
+    // length, since nothing is re-serialized (SYNC-LEN-008).
+    let mut parse_warnings: Vec<(bool, String)> = Vec::new();
     for (i, entry) in region.entries.iter().enumerate() {
         match Bullet::parse_reporting_dropped(entry.bullet_line) {
             Ok((bullet, dropped_blocked_by)) => {
@@ -177,11 +217,11 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
                 // the bullet's position) so a user who listed several blockers
                 // isn't silently robbed of them on their first sync.
                 for dropped in &dropped_blocked_by {
-                    warnings.push(format!(
+                    parse_warnings.push((true, format!(
                         "warning: bullet #{n} drops extra [blocked-by:{dropped}] (only the first [blocked-by:] is kept): {line:?}",
                         n = i + 1,
                         line = entry.bullet_line.trim_end()
-                    ));
+                    )));
                 }
                 parsed.push(Some(bullet));
             }
@@ -190,15 +230,36 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
                 // (not a file line number — the parsed region doesn't track
                 // those) so the human fixing it can locate the line, alongside
                 // the debug-escaped content.
-                warnings.push(format!(
-                    "warning: bullet #{} has no title, skipping: {:?}",
-                    i + 1,
-                    entry.bullet_line.trim_end()
+                parse_warnings.push((
+                    false,
+                    format!(
+                        "warning: bullet #{} has no title, skipping: {:?}",
+                        i + 1,
+                        entry.bullet_line.trim_end()
+                    ),
                 ));
                 parsed.push(None);
             }
         }
     }
+
+    // SYNC-LEN-002: refuse to ID any new bullet whose measured title is over
+    // the limit. Runs before ID assignment, so duplicate-ID and retry errors
+    // are not reached (SYNC-LEN-009) and nothing is written.
+    let offenders = title_offenders(&region, &parsed, config.max_title_length());
+    if !offenders.is_empty() {
+        warnings.extend(
+            parse_warnings
+                .into_iter()
+                .filter(|(dropped_blocker, _)| !dropped_blocker)
+                .map(|(_, w)| w),
+        );
+        return Err(SyncError::TitleTooLong {
+            limit: config.max_title_length(),
+            offenders,
+        });
+    }
+    warnings.extend(parse_warnings.into_iter().map(|(_, w)| w));
 
     // One ID slot per well-formed bullet, in `parsed` order. `Bullet::parse`
     // already lowercases IDs (FMT-MARK-001): tombstones are lowercase-normalized
@@ -311,6 +372,37 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
 /// them without an item file to receive them would silently destroy the notes
 /// (FMT-PARSE-006).
 // @spec SYNC-NOTES-001, SYNC-NOTES-005, FMT-PARSE-006
+/// Every new bullet (well-formed, no `[id]`) whose measured title is longer
+/// than `limit`, positioned among all task bullets. `limit == 0` disables the
+/// check (SYNC-LEN-006); bullets with an `[id]` and malformed bullets are never
+/// checked (SYNC-LEN-005).
+// @spec SYNC-LEN-002, SYNC-LEN-003, SYNC-LEN-005, SYNC-LEN-006
+fn title_offenders(
+    region: &ParsedRegion,
+    parsed: &[Option<Bullet>],
+    limit: usize,
+) -> Vec<TitleOffender> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    region
+        .entries
+        .iter()
+        .zip(parsed)
+        .enumerate()
+        .filter_map(|(i, (entry, bullet))| {
+            bullet.as_ref().filter(|b| b.id.is_none())?;
+            let title = title_length::measured_title(entry.bullet_line);
+            let length = title.chars().count();
+            (length > limit).then_some(TitleOffender {
+                position: i + 1,
+                length,
+                title,
+            })
+        })
+        .collect()
+}
+
 fn extract_notes_and_link(
     region: &mut ParsedRegion,
     parsed: &mut [Option<Bullet>],

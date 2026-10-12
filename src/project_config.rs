@@ -1,4 +1,4 @@
-// @spec FMT-CFG-001, FMT-CFG-002, FMT-CFG-003
+// @spec FMT-CFG-001, FMT-CFG-002, FMT-CFG-003, FMT-CFG-004, FMT-CFG-005
 
 #![allow(dead_code)]
 
@@ -9,6 +9,7 @@ use thiserror::Error;
 use toml::Value;
 
 use crate::prefix::{self, PrefixError};
+use crate::title_length::DEFAULT_MAX_TITLE_LENGTH;
 
 #[derive(Debug, Error)]
 pub(crate) enum ConfigError {
@@ -22,6 +23,9 @@ pub(crate) enum ConfigError {
     ProjectIdNotString,
     #[error("vat.toml [project].id is invalid: {0}; run `vat init`")]
     InvalidProjectId(#[from] PrefixError),
+    // No `vat init` pointer: re-initializing would not fix a bad value.
+    #[error("vat.toml [sync].max_title_length must be a non-negative integer")]
+    InvalidMaxTitleLength,
     #[error("vat.toml not found at {0}; run `vat init`")]
     NotFound(PathBuf),
     #[error("vat.toml I/O error: {0}")]
@@ -34,14 +38,15 @@ pub(crate) enum ConfigError {
 impl PartialEq for ConfigError {
     fn eq(&self, other: &Self) -> bool {
         use ConfigError::{
-            InvalidProjectId, Io, MissingProject, MissingProjectId, NotFound, Parse,
-            ProjectIdNotString,
+            InvalidMaxTitleLength, InvalidProjectId, Io, MissingProject, MissingProjectId,
+            NotFound, Parse, ProjectIdNotString,
         };
         match (self, other) {
             (Parse(a), Parse(b)) => a == b,
             (MissingProject, MissingProject)
             | (MissingProjectId, MissingProjectId)
-            | (ProjectIdNotString, ProjectIdNotString) => true,
+            | (ProjectIdNotString, ProjectIdNotString)
+            | (InvalidMaxTitleLength, InvalidMaxTitleLength) => true,
             (InvalidProjectId(a), InvalidProjectId(b)) => a == b,
             (NotFound(a), NotFound(b)) => a == b,
             (Io(a), Io(b)) => a.kind() == b.kind(),
@@ -54,6 +59,7 @@ impl PartialEq for ConfigError {
 pub(crate) struct ProjectConfig {
     document: Value,
     project_id: String,
+    max_title_length: usize,
 }
 
 impl ProjectConfig {
@@ -65,6 +71,7 @@ impl ProjectConfig {
         Ok(Self {
             document,
             project_id: normalized,
+            max_title_length: DEFAULT_MAX_TITLE_LENGTH,
         })
     }
 
@@ -74,7 +81,25 @@ impl ProjectConfig {
 
     /// The effective `[sync].max_title_length` (FMT-CFG-004); `0` disables.
     pub(crate) fn max_title_length(&self) -> usize {
-        todo!("FMT-CFG-004")
+        self.max_title_length
+    }
+
+    /// Set `[sync].max_title_length`, creating the `[sync]` table if absent
+    /// (CMD-CFG-009). Every other section and key is preserved.
+    pub(crate) fn set_max_title_length(&mut self, limit: usize) -> Result<(), ConfigError> {
+        let as_i64 = i64::try_from(limit).map_err(|_| ConfigError::InvalidMaxTitleLength)?;
+        let Value::Table(root) = &mut self.document else {
+            unreachable!("ProjectConfig.document is always a Table");
+        };
+        let sync_entry = root
+            .entry("sync".to_string())
+            .or_insert_with(|| Value::Table(toml::value::Table::new()));
+        let Value::Table(sync_table) = sync_entry else {
+            unreachable!("parse rejects a non-table [sync] (FMT-CFG-005)");
+        };
+        sync_table.insert("max_title_length".to_string(), Value::Integer(as_i64));
+        self.max_title_length = limit;
+        Ok(())
     }
 
     // @spec FMT-CFG-001
@@ -109,7 +134,7 @@ pub(crate) fn load(path: &Path) -> Result<ProjectConfig, ConfigError> {
     }
 }
 
-// @spec FMT-CFG-001, FMT-CFG-002, FMT-CFG-003
+// @spec FMT-CFG-001, FMT-CFG-002, FMT-CFG-003, FMT-CFG-004, FMT-CFG-005
 pub(crate) fn parse(input: &str) -> Result<ProjectConfig, ConfigError> {
     let document: Value = input
         .parse::<Value>()
@@ -124,11 +149,29 @@ pub(crate) fn parse(input: &str) -> Result<ProjectConfig, ConfigError> {
     let id_value = project.get("id").ok_or(ConfigError::MissingProjectId)?;
     let id_str = id_value.as_str().ok_or(ConfigError::ProjectIdNotString)?;
     let normalized = validate_and_normalize(id_str)?;
+    let max_title_length = read_max_title_length(&document)?;
 
     Ok(ProjectConfig {
         document,
         project_id: normalized,
+        max_title_length,
     })
+}
+
+// Validated eagerly on every load (FMT-CFG-005): a bad value fails any
+// command, not just sync, so a config typo surfaces immediately.
+fn read_max_title_length(document: &Value) -> Result<usize, ConfigError> {
+    let Some(sync) = document.get("sync") else {
+        return Ok(DEFAULT_MAX_TITLE_LENGTH);
+    };
+    let sync = sync.as_table().ok_or(ConfigError::InvalidMaxTitleLength)?;
+    match sync.get("max_title_length") {
+        None => Ok(DEFAULT_MAX_TITLE_LENGTH),
+        Some(value) => value
+            .as_integer()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or(ConfigError::InvalidMaxTitleLength),
+    }
 }
 
 // The project-ID *prefix* uses the relaxed alphanumeric validator
