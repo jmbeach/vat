@@ -126,7 +126,7 @@ Keep the bullet to a short title and put the detail in indented notes beneath it
 
   - Speed up sync on large backlogs
     Probably the per-run item-file scan; profile with 5k bullets.
-    Compare against the read_dir pre-scan from vat-mzd.
+    Compare timings before and after.
 
 `vat sync` moves the indented notes into backlog/items/<id>.md and links the bullet to it.
 ```
