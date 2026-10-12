@@ -531,6 +531,39 @@ mod tests {
         );
     }
 
+    /// Post-first-sync enrichment: the bullet already carries the canonical
+    /// pointer suffix in its title (as it would after a prior sync created the
+    /// item file). New notes added beneath it must be appended to the existing
+    /// item file, the pointer suffix must NOT be doubled, and the bullet must
+    /// collapse to one line.
+    // @spec SYNC-NOTES-003, SYNC-PTR-003
+    #[test]
+    fn run_appends_notes_when_bullet_already_has_ptr_suffix() {
+        let dir = setup();
+        let items_dir = dir.path().join("items");
+        fs::create_dir_all(&items_dir).unwrap();
+        let item_path = items_dir.join("vat-t1h.md");
+        fs::write(&item_path, "---\nid: vat-t1h\n---\n\nExisting note.\n").unwrap();
+        // Bullet already has the pointer suffix as it would after a prior sync.
+        write_backlog(
+            &dir,
+            "- [vat-t1h] Title (see ./items/vat-t1h.md)\n  New note.\n",
+        );
+        run(dir.path()).unwrap();
+
+        // Pointer suffix must not be doubled; bullet collapses to one line.
+        assert_eq!(
+            read_backlog(&dir),
+            "- [vat-t1h] Title (see ./items/vat-t1h.md)\n"
+        );
+        let contents = fs::read_to_string(&item_path).unwrap();
+        assert!(contents.contains("Existing note."), "original note preserved");
+        assert!(contents.contains("New note."), "new note appended");
+        let existing_pos = contents.find("Existing note.").unwrap();
+        let new_pos = contents.find("New note.").unwrap();
+        assert!(new_pos > existing_pos, "new note comes after existing note");
+    }
+
     // ── SYNC-NOTES-004 ───────────────────────────────────────────────────────
 
     // @spec SYNC-NOTES-004
