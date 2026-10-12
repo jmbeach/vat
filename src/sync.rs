@@ -557,7 +557,10 @@ mod tests {
             "- [vat-t1h] Title (see ./items/vat-t1h.md)\n"
         );
         let contents = fs::read_to_string(&item_path).unwrap();
-        assert!(contents.contains("Existing note."), "original note preserved");
+        assert!(
+            contents.contains("Existing note."),
+            "original note preserved"
+        );
         assert!(contents.contains("New note."), "new note appended");
         let existing_pos = contents.find("Existing note.").unwrap();
         let new_pos = contents.find("New note.").unwrap();
