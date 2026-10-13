@@ -28,7 +28,9 @@ Tagged releases also carry prebuilt binaries — see the
 
 ## Workflow
 
-1. Jot new bullets into `backlog.md`:
+1. Jot new bullets into `backlog.md`. Keep each bullet a short title —
+   `vat sync` rejects new titles over 120 characters (`[sync]
+   max_title_length` in `vat.toml`) — and put the detail in indented notes:
 
    ```
    - rewrite the cache layer

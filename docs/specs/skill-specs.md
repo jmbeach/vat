@@ -2,7 +2,7 @@
 
 Requirements for what is specific to the `vat` skill as an implementation: binary-first delegation, the fidelity contract, nested-repo detection, the atomicity guard, the atomic claim loop, and per-command terminal preconditions. See [skill LLD](../llds/skill.md). The command and format behavior the skill shares with the binary is specified in the `FMT-*`, `SYNC-*`, and `CMD-*` segments, not here.
 
-Throughout: a **nested-repo backlog** is one where `backlog/.git` exists (the backlog is its own git repository); otherwise the backlog is tracked by the outer project repo. The binary is unaware of the distinction and never runs git; only the skill detects it and runs the atomic claim loop. A **mutating command** is any command that writes a file under `backlog/`: `sync`, `start`, `block`, `unblock`, `done`, `config set project.id`. Of these, the **claim-loop commands** — `sync`, `start`, `block`, `unblock`, `done` — run the full atomic claim loop; `config set project.id` is excluded from the loop (concurrent re-prefixing is out of scope) and instead commits and pushes once (see § `config set project.id`).
+Throughout: a **nested-repo backlog** is one where `backlog/.git` exists (the backlog is its own git repository); otherwise the backlog is tracked by the outer project repo. The binary is unaware of the distinction and never runs git; only the skill detects it and runs the atomic claim loop. A **mutating command** is any command that writes a file under `backlog/`: `sync`, `start`, `block`, `unblock`, `done`, and the **project-config sets** `config set project.id` and `config set sync.max_title_length`. Of these, the **claim-loop commands** — `sync`, `start`, `block`, `unblock`, `done` — run the full atomic claim loop; the project-config sets are excluded from the loop (concurrent config edits are out of scope) and instead commit and push once (see § project-config sets).
 
 Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
@@ -21,7 +21,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## Nested-repo detection
 
-- [x] **SKILL-DETECT-001** — When `backlog/.git` exists (as a directory, or as a file in the submodule/worktree case), the skill shall run claim-loop commands through the atomic claim loop (`SKILL-LOOP-*`) and `config set project.id` through its single-push path (`SKILL-CFG-*`).
+- [x] **SKILL-DETECT-001** — When `backlog/.git` exists (as a directory, or as a file in the submodule/worktree case), the skill shall run claim-loop commands through the atomic claim loop (`SKILL-LOOP-*`) and the project-config sets through their single-push path (`SKILL-CFG-*`).
 - [x] **SKILL-DETECT-002** — When `backlog/.git` does not exist, the skill shall edit files in place and perform no git operations, exactly as the binary does.
 - [x] **SKILL-DETECT-003** — The skill shall recognize a nested-repo backlog by filesystem layout only (`backlog/.git`); no configuration key or flag shall select or override this.
 - [x] **SKILL-DETECT-004** — `config get` (non-mutating) and `init` (runs before `backlog/` exists) shall never run the atomic claim loop, whether or not the backlog is a nested repo.
@@ -29,7 +29,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 ## Atomicity guard
 
 - [x] **SKILL-GUARD-001** — While the backlog is a nested repo, when a mutating command starts, the skill shall evaluate the atomicity guard before mutating any file: the `backlog/` working tree is clean (no modified, staged, or untracked files) AND, after a `git fetch`, `HEAD` is an ancestor of the remote-tracking branch (`@{u}`).
-- [x] **SKILL-GUARD-002** — While the backlog is a nested repo, when the atomicity guard is satisfied, the skill shall run a claim-loop command inside the atomic claim loop (reusing the guard's fetch as the first refresh's fetch), and shall run `config set project.id` through its single-push path (§ `config set project.id`).
+- [x] **SKILL-GUARD-002** — While the backlog is a nested repo, when the atomicity guard is satisfied, the skill shall run a claim-loop command inside the atomic claim loop (reusing the guard's fetch as the first refresh's fetch), and shall run a project-config set through its single-push path (§ project-config sets).
 - [x] **SKILL-GUARD-003** — While the backlog is a nested repo, if the `backlog/` working tree is dirty or `HEAD` has commits the remote-tracking branch lacks, then the skill shall fall back to a local edit: apply the command's file changes exactly as the binary would, perform no `git commit`/`reset`/`push`, and report that the change was not pushed together with the reason (uncommitted changes, or unpushed local commits).
 - [x] **SKILL-GUARD-004** — While the backlog is a nested repo, if `@{u}` does not resolve (no configured upstream, or detached `HEAD`), then the skill shall abort with the raw git error (exit semantics of CMD-EXIT-002) and shall not mutate any file.
 - [x] **SKILL-GUARD-005** — While the backlog is a nested repo, if the guard's `git fetch` fails (unreachable remote, auth failure), then the skill shall abort with the raw git error (exit semantics of CMD-EXIT-002) and shall not mutate any file.
@@ -38,7 +38,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 - [x] **SKILL-LOOP-001** — While the backlog is a nested repo with the atomicity guard satisfied, every claim-loop command shall run the sequence refresh → re-read → terminal-precondition check → mutate → commit → push, with every git command run from inside `backlog/`.
 - [x] **SKILL-LOOP-002** — The loop's refresh shall be `git fetch` followed by `git reset --hard` to the remote-tracking branch.
-- [x] **SKILL-LOOP-003** — The loop's commit shall stage all `backlog/` changes and use the command's fixed commit message: `vat sync`, `vat start <id>`, `vat block <id> <blocker-id>`, `vat unblock <id>`, or `vat done <id>`. (`config set project.id` is not a claim-loop command; its commit message is specified by SKILL-CFG-001.)
+- [x] **SKILL-LOOP-003** — The loop's commit shall stage all `backlog/` changes and use the command's fixed commit message: `vat sync`, `vat start <id>`, `vat block <id> <blocker-id>`, `vat unblock <id>`, or `vat done <id>`. (The project-config sets are not claim-loop commands; their commit message is specified by SKILL-CFG-001.)
 - [x] **SKILL-LOOP-004** — When the loop's push succeeds, the skill shall report success and stop (first push wins).
 - [x] **SKILL-LOOP-005** — If the loop's push is rejected as `rejected`/`non-fast-forward` (contention), then the skill shall not rebase or merge; it shall `git reset --hard` to the remote-tracking branch and re-run the decision from scratch on the refreshed state.
 - [x] **SKILL-LOOP-006** — Between contention retries, the skill shall wait an exponentially increasing backoff with random jitter, and shall cap retries at a fixed maximum attempt count.
@@ -56,12 +56,12 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **SKILL-TERM-005** — When `unblock <id>` finds the task on refreshed state with no `[blocked-by:...]` marker, the skill shall stop reporting success.
 - [x] **SKILL-TERM-006** — When `block <id> <blocker-id>` finds the task on refreshed state already carrying `[blocked-by:<blocker-id>]` for the same blocker, the skill shall stop reporting success.
 - [x] **SKILL-TERM-007** — `sync` shall have no terminal precondition; it shall always proceed to mutate on refreshed state.
-- [x] **SKILL-TERM-008** — Terminal preconditions shall not replace a command's local validation; a validation failure on refreshed state (e.g. `unknown id`, `unknown blocker`) shall abort the command without retrying.
+- [x] **SKILL-TERM-008** — Terminal preconditions shall not replace a command's local validation; a validation failure on refreshed state (e.g. `unknown id`, `unknown blocker`, or a `sync` title-length violation per SYNC-LEN-002) shall abort the command without retrying.
 
-## `config set project.id` (single push, no claim loop)
+## Project-config sets: `config set project.id` / `config set sync.max_title_length` (single push, no claim loop)
 
-Concurrent re-prefixing is out of scope; `config set project.id` does not run the contention loop. Its local validation (`CMD-CFG-004` format, `CMD-CFG-005` no mixed prefixes) applies before any of the below.
+Concurrent re-prefixing or limit changes are out of scope; the project-config sets do not run the contention loop. Their local validation (`project.id`: `CMD-CFG-004` format, `CMD-CFG-005` no mixed prefixes; `sync.max_title_length`: `CMD-CFG-008`) applies before any of the below.
 
-- [x] **SKILL-CFG-001** — While the backlog is a nested repo with the atomicity guard satisfied, `config set project.id <value>` shall not run the claim loop; the skill shall edit `vat.toml`, commit with `vat config set project.id <value>`, and push once, and shall not refresh, reset, or re-decide on any push outcome.
-- [x] **SKILL-CFG-002** — While the backlog is a nested repo, if `config set project.id`'s single push is rejected or fails for any reason, the skill shall fail fast with the raw git error (exit semantics of CMD-EXIT-002); it shall not retry.
-- [x] **SKILL-CFG-003** — When `config set project.id <value>` finds `project.id` already equal to `<value>`, the skill shall succeed without writing, committing, or pushing.
+- [x] **SKILL-CFG-001** — While the backlog is a nested repo with the atomicity guard satisfied, a project-config set `config set <key> <value>` (`<key>` is `project.id` or `sync.max_title_length`) shall not run the claim loop; the skill shall edit `vat.toml`, commit with `vat config set <key> <value>`, and push once, and shall not refresh, reset, or re-decide on any push outcome.
+- [x] **SKILL-CFG-002** — While the backlog is a nested repo, if a project-config set's single push is rejected or fails for any reason, the skill shall fail fast with the raw git error (exit semantics of CMD-EXIT-002); it shall not retry.
+- [x] **SKILL-CFG-003** — When a project-config set `config set <key> <value>` finds `<key>` already equal to `<value>` in `vat.toml` (for `sync.max_title_length`, an explicitly configured value; an unset key equal only by default still writes), the skill shall succeed without writing, committing, or pushing.

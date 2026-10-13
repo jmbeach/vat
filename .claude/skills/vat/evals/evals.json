@@ -192,6 +192,51 @@
         { "text": "The command aborts with an error because 'toolong' is not exactly 3 Crockford base32 characters", "spec_ids": ["CMD-INIT-004"] },
         { "text": "No backlog/ directory was created", "spec_ids": ["CMD-INIT-004"] }
       ]
+    },
+    {
+      "id": 13,
+      "eval_name": "sync-rejects-long-new-bullet",
+      "prompt": "/vat sync",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- add request metrics\n- investigate why the nightly export job intermittently times out against the reporting replica and add retries with backoff\n" },
+        { "path": "backlog/.used-ids", "content": "" }
+      ],
+      "assertions": [
+        { "text": "The command aborts with an error naming bullet #2 and its length (more than 120 chars)", "spec_ids": ["SYNC-LEN-002",  "SYNC-LEN-003"] },
+        { "text": "The error states the 120-char limit and the [sync].max_title_length key, shows an example bullet with indented notes beneath it, and explains that sync moves indented notes into backlog/items/<id>.md", "spec_ids": ["SYNC-LEN-004"] },
+        { "text": "backlog/backlog.md is byte-identical to the input — neither bullet received an [id] marker", "spec_ids": ["SYNC-LEN-002"] },
+        { "text": "backlog/.used-ids is still empty and no backlog/items/ file was created", "spec_ids": ["SYNC-LEN-002"] }
+      ]
+    },
+    {
+      "id": 14,
+      "eval_name": "sync-length-ignores-tags-and-grandfathers-ided-bullets",
+      "prompt": "/vat sync",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n\n[sync]\nmax_title_length = 20\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] this already-assigned task has a title well over twenty chars\n- [TODO] [P1] fix the parser\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "The command succeeds: '[TODO] [P1] fix the parser' measures 'fix the parser' (14 chars), under the limit of 20, because bracketed tags do not count", "spec_ids": ["SYNC-LEN-001"] },
+        { "text": "The [foo-7k2] bullet is left unchanged even though its title exceeds 20 chars, because bullets that already have an id are not checked", "spec_ids": ["SYNC-LEN-005"] },
+        { "text": "The second bullet now begins with a new [foo-XXX] id marker, followed by its title '[TODO] [P1] fix the parser' verbatim", "spec_ids": ["SYNC-ID-001"] }
+      ]
+    },
+    {
+      "id": 15,
+      "eval_name": "config-set-max-title-length",
+      "prompt": "/vat config set sync.max_title_length 80",
+      "files": [
+        { "path": "backlog/vat.toml", "content": "[project]\nid = \"foo\"\n" },
+        { "path": "backlog/backlog.md", "content": "---\nversion: 1\n---\n\n- [foo-7k2] task A\n" },
+        { "path": "backlog/.used-ids", "content": "foo-7k2\n" }
+      ],
+      "assertions": [
+        { "text": "backlog/vat.toml now contains a [sync] table with max_title_length = 80 as a TOML integer (not a quoted string)", "spec_ids": ["CMD-CFG-009"] },
+        { "text": "backlog/vat.toml still contains [project] with id = \"foo\"", "spec_ids": ["CMD-CFG-009",  "FMT-CFG-003"] }
+      ]
     }
   ]
 }

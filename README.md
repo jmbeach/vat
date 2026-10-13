@@ -55,6 +55,8 @@ No-install option: hand an agent the [`vat` skill](./.claude/skills/vat/SKILL.md
 
 At it's core, `vat` is just a markdown file that has single line entries for each task in the backlog. If the information needed to capture the task fully extends past one line, `vat` stores the rest of the information of that item in a file under `backlog/items/<id>.md` You can add tags to a backlog item using square brackets. Ex: `[in-progress]` or `[by:jared]`.
 
+To keep entries scannable, `vat sync` rejects a new bullet whose title (not counting `[...]` tags) is longer than 120 characters, and shows how to move the detail into indented notes. Change the limit, or set it to `0` to turn the check off, with `vat config set sync.max_title_length <n>` (stored as `[sync] max_title_length` in `backlog/vat.toml`).
+
 The `vat` skill and cli support claiming tasks, creating them / assigning them ID's, completing them, etc.
 
 ## License

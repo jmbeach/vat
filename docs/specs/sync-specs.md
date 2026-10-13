@@ -6,7 +6,7 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 
 ## ID assignment
 
-- [x] **SYNC-ID-001** — When `vat sync` encounters a bullet without an `[id]` marker, the system shall assign it a new ID composed of the project prefix from `vat.toml`, a literal `-`, and 3 randomly-generated Crockford base32 characters.
+- [x] **SYNC-ID-001** — When `vat sync` encounters a bullet without an `[id]` marker, the system shall assign it a new ID composed of the project prefix from `vat.toml`, a literal `-`, and 3 randomly-generated Crockford base32 characters. Assignment takes effect only if the run completes: a run that aborts (e.g. on a title-length violation, SYNC-LEN-002) assigns and persists no IDs.
 - [x] **SYNC-ID-002** — When generating a new ID, the system shall reject any candidate that appears in `backlog/.used-ids` or that is currently present on another bullet in the parsed region, and retry up to 100 times.
 - [x] **SYNC-ID-003** — When ID generation exhausts its retry cap, the system shall abort with an error and shall not write to any file.
 - [x] **SYNC-ID-004** — When `vat sync` assigns a new ID, the system shall append that ID to `backlog/.used-ids` after a successful write of `backlog.md`.
@@ -33,6 +33,20 @@ Status: `[x]` implemented, `[ ]` active gap, `[D]` deferred.
 - [x] **SYNC-PTR-001** — When `vat sync` finishes processing a bullet whose id has a corresponding `backlog/items/<id>.md` file, the system shall ensure the bullet's title ends with the literal suffix ` (see ./items/<id>.md)` (single leading space, path relative to `backlog/`), appending it if not already present.
 - [x] **SYNC-PTR-002** — When `vat sync` finishes processing a bullet whose id has no corresponding `backlog/items/<id>.md` file, the system shall not add the pointer suffix and shall not remove an existing one.
 - [x] **SYNC-PTR-003** — When the bullet's title already ends with the canonical ` (see ./items/<id>.md)` suffix and the item file exists, `vat sync` shall leave the suffix unchanged (idempotent).
+
+## Title length
+
+Throughout: a **new bullet** is a well-formed bullet (non-empty title, FMT-PARSE-006) with no `[id]` marker; the **measured title** is computed from the raw bullet line per SYNC-LEN-001; the **limit** is `[sync].max_title_length` from `vat.toml` (FMT-CFG-004).
+
+- [x] **SYNC-LEN-001** — When `vat sync` measures a new bullet's title, the system shall derive the measured title from the raw bullet line by (1) removing the leading `- ` bullet marker, (2) removing every span from a `[` through the next `]`, anywhere on the line, whether or not it is a recognized marker (an unmatched `[` is kept as text), (3) removing a `(see ./items/<anything>.md)` pointer that is followed only by whitespace, and (4) trimming leading and trailing whitespace; interior whitespace is kept as written. Its length is the count of Unicode scalar values (chars, not bytes). A bullet made only of tags (`- [TODO]`) is a well-formed new bullet with a measured length of 0.
+- [x] **SYNC-LEN-002** — When the limit is greater than 0 and at least one new bullet's measured title is longer than the limit, `vat sync` shall abort with an error and shall not write to any file (no `backlog.md` rewrite, no item-file create/append, no `.used-ids` append). A measured title of exactly the limit passes.
+- [x] **SYNC-LEN-003** — When `vat sync` aborts per SYNC-LEN-002, the error shall list every offending new bullet in the file (not only the first), each identified by its 1-based position among all task bullets in the parsed region (malformed bullets included, matching the FMT-PARSE-006 warning), its measured length, and its measured title truncated to the first 80 chars with `…` appended when cut.
+- [x] **SYNC-LEN-004** — When `vat sync` aborts per SYNC-LEN-002, the error shall state the limit and the config key that sets it, show a short example of a well-formed bullet with indented notes beneath it, and explain that `vat sync` moves indented notes into `backlog/items/<id>.md`.
+- [x] **SYNC-LEN-005** — `vat sync` shall not apply the title-length check to a bullet that already carries an `[id]` marker, nor to a malformed bullet (FMT-PARSE-006).
+- [x] **SYNC-LEN-006** — When the limit is `0`, `vat sync` shall not perform the title-length check.
+- [x] **SYNC-LEN-007** — When `vat sync` aborts per SYNC-LEN-002, the system shall exit with code 1 (a user-fixable command error, CMD-EXIT-002).
+- [x] **SYNC-LEN-008** — When `vat sync` aborts per SYNC-LEN-002, the system shall not print the dropped-`[blocked-by:...]` warnings of SYNC-MARK-004 (nothing was re-serialized); malformed-bullet warnings (FMT-PARSE-006) shall still print before the error.
+- [x] **SYNC-LEN-009** — When a `vat sync` run has both a title-length violation and a duplicate `[id]` (SYNC-ID-006), the system shall report the title-length error.
 
 ## Idempotence and writes
 
