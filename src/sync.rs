@@ -372,37 +372,6 @@ fn run_impl(backlog_dir: &Path, warnings: &mut Vec<String>) -> Result<SyncOutcom
 /// them without an item file to receive them would silently destroy the notes
 /// (FMT-PARSE-006).
 // @spec SYNC-NOTES-001, SYNC-NOTES-005, FMT-PARSE-006
-/// Every new bullet (well-formed, no `[id]`) whose measured title is longer
-/// than `limit`, positioned among all task bullets. `limit == 0` disables the
-/// check (SYNC-LEN-006); bullets with an `[id]` and malformed bullets are never
-/// checked (SYNC-LEN-005).
-// @spec SYNC-LEN-002, SYNC-LEN-003, SYNC-LEN-005, SYNC-LEN-006
-fn title_offenders(
-    region: &ParsedRegion,
-    parsed: &[Option<Bullet>],
-    limit: usize,
-) -> Vec<TitleOffender> {
-    if limit == 0 {
-        return Vec::new();
-    }
-    region
-        .entries
-        .iter()
-        .zip(parsed)
-        .enumerate()
-        .filter_map(|(i, (entry, bullet))| {
-            bullet.as_ref().filter(|b| b.id.is_none())?;
-            let title = title_length::measured_title(entry.bullet_line);
-            let length = title.chars().count();
-            (length > limit).then_some(TitleOffender {
-                position: i + 1,
-                length,
-                title,
-            })
-        })
-        .collect()
-}
-
 fn extract_notes_and_link(
     region: &mut ParsedRegion,
     parsed: &mut [Option<Bullet>],
@@ -455,6 +424,37 @@ fn extract_notes_and_link(
         apply_pointer_suffix(bullet, &existing_ids, extracting_notes);
     }
     pending
+}
+
+/// Every new bullet (well-formed, no `[id]`) whose measured title is longer
+/// than `limit`, positioned among all task bullets. `limit == 0` disables the
+/// check (SYNC-LEN-006); bullets with an `[id]` and malformed bullets are never
+/// checked (SYNC-LEN-005).
+// @spec SYNC-LEN-002, SYNC-LEN-003, SYNC-LEN-005, SYNC-LEN-006
+fn title_offenders(
+    region: &ParsedRegion,
+    parsed: &[Option<Bullet>],
+    limit: usize,
+) -> Vec<TitleOffender> {
+    if limit == 0 {
+        return Vec::new();
+    }
+    region
+        .entries
+        .iter()
+        .zip(parsed)
+        .enumerate()
+        .filter_map(|(i, (entry, bullet))| {
+            bullet.as_ref().filter(|b| b.id.is_none())?;
+            let title = title_length::measured_title(entry.bullet_line);
+            let length = title.chars().count();
+            (length > limit).then_some(TitleOffender {
+                position: i + 1,
+                length,
+                title,
+            })
+        })
+        .collect()
 }
 
 /// Ensure `bullet`'s title ends with the canonical ` (see ./items/<id>.md)`
