@@ -18,6 +18,7 @@ mod readme_template;
 mod sync;
 #[cfg(test)]
 mod test_support;
+mod title_length;
 mod tombstone;
 mod user_config;
 
@@ -91,12 +92,12 @@ enum Commands {
 enum ConfigAction {
     /// Print a config value
     Get {
-        /// Config key (user.name or project.id)
+        #[arg(help = "Config key (user.name, project.id, or sync.max_title_length)")]
         key: String,
     },
     /// Set a config value
     Set {
-        /// Config key (user.name or project.id)
+        #[arg(help = "Config key (user.name, project.id, or sync.max_title_length)")]
         key: String,
         /// Value to store
         value: String,
@@ -272,6 +273,7 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
             | ConfigError::MissingProjectId
             | ConfigError::ProjectIdNotString
             | ConfigError::InvalidProjectId(_)
+            | ConfigError::InvalidMaxTitleLength
             | ConfigError::NotFound(_) => 1,
         });
     }
@@ -318,6 +320,7 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
             SyncError::Tombstone(t) => classify_cause(t),
             // On-disk data the user can fix by editing backlog files.
             SyncError::NoBacklog
+            | SyncError::TitleTooLong { .. }
             | SyncError::IdAssignment(IdAssignmentError::DuplicateId(_))
             | SyncError::ItemFile(ItemFileError::MissingFrontmatter | ItemFileError::Utf8(_)) => {
                 Some(1)

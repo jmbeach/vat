@@ -4,7 +4,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 
 ## Status
 
-**OK** — re-verified 2026-10-10 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`); last structural change 2026-06-19 (vat-h4n: project-ID prefix relaxed to alphanumeric). All 59 active specs implemented across 9 modules. vat-h4n added the `src/prefix.rs` validator (FMT-PFX-001..004) and relaxed the prefix segment of every `<prefix>-<suffix>` token check (project config, tombstone, bullet) from Crockford to alphanumeric while keeping the suffix Crockford. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`. `Bullet::bare_title()` added (vat-mzd, PR #61) to strip the SYNC-PTR pointer suffix for display/search contexts — not a new FMT-* spec, infrastructure for `sync`.
+**OK** — re-verified 2026-10-12 (HEAD `f6e247e`, vat-ccg added FMT-CFG-004/005 `[sync].max_title_length`); previously 2026-10-10 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`); last structural change 2026-06-19 (vat-h4n: project-ID prefix relaxed to alphanumeric). All 61 active specs implemented across 9 modules. vat-h4n added the `src/prefix.rs` validator (FMT-PFX-001..004) and relaxed the prefix segment of every `<prefix>-<suffix>` token check (project config, tombstone, bullet) from Crockford to alphanumeric while keeping the suffix Crockford. The bullet marker tokenizer (FMT-MARK-001..007, FMT-WS-002) landed via vat-g5y (PR #46) in `src/bullet.rs`; FMT-PARSE-006 (empty-bullet warn-and-skip) landed via vat-v3k when `vat sync` was wired onto `Bullet::parse`/`serialize`. `Bullet::bare_title()` added (vat-mzd, PR #61) to strip the SYNC-PTR pointer suffix for display/search contexts — not a new FMT-* spec, infrastructure for `sync`.
 
 ## References
 
@@ -15,7 +15,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - docs/llds/backlog-format.md
 
 ### EARS
-- docs/specs/backlog-format-specs.md (59 active specs: 59 implemented, 0 gaps)
+- docs/specs/backlog-format-specs.md (61 active specs: 61 implemented, 0 gaps)
 
 ### Tests
 - src/backlog_file.rs (inline `#[cfg(test)]`)
@@ -35,7 +35,7 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 - src/prefix.rs — FMT-PFX-* (alphanumeric project-ID prefix validator)
 - src/tombstone.rs — FMT-TOMB-* (suffix via base32, prefix via `prefix`)
 - src/user_config.rs — FMT-USR-*
-- src/project_config.rs — FMT-CFG-* (prefix validated via `prefix`)
+- src/project_config.rs — FMT-CFG-* (prefix validated via `prefix`; `[sync].max_title_length` read eagerly, default from `title_length::DEFAULT_MAX_TITLE_LENGTH`)
 - src/file_io.rs — FMT-WS-001 (line-ending normalization; wired into cmd_config and sync)
 - src/item_file.rs — FMT-ITEM-*, SYNC-NOTES-004
 - src/bullet.rs — FMT-MARK-001 to 007, FMT-PARSE-006 (detection), FMT-WS-002
@@ -68,11 +68,11 @@ File format parsing and serialization — every on-disk format VAT reads or writ
 | Bullet line markers | FMT-MARK-001 to 007 | 7 | 0 | 0 |
 | Item files | FMT-ITEM-001 to 003 | 3 | 0 | 0 |
 | Tombstone file | FMT-TOMB-001 to 009 | 9 | 0 | 0 |
-| Project config | FMT-CFG-001 to 003 | 3 | 0 | 0 |
+| Project config | FMT-CFG-001 to 005 | 5 | 0 | 0 |
 | User config | FMT-USR-001 to 006 | 6 | 0 | 0 |
 | Line endings / WS | FMT-WS-001 to 002 | 2 | 0 | 0 |
 
-**Summary:** 59 of 59 active specs implemented; 0 deferred; 0 gaps. The segment no longer blocks `sync`; `commands` remains a consumer of `src/bullet.rs`.
+**Summary:** 61 of 61 active specs implemented; 0 deferred; 0 gaps. The segment no longer blocks `sync`; `commands` remains a consumer of `src/bullet.rs`.
 
 ## Key Findings
 

@@ -78,14 +78,16 @@ Reuses the shared parse-mutate-emit machinery wired into `sync` by vat-v3k — `
 
 ## `vat config get <key>`
 
-- Supported keys: `user.name`, `project.id`.
-- `user.name` reads from global config; `project.id` reads from `backlog/vat.toml`.
-- Print the value to stdout, or print nothing and exit non-zero if unset.
+- Supported keys: `user.name`, `project.id`, `sync.max_title_length`.
+- `user.name` reads from global config; `project.id` and `sync.max_title_length` read from `backlog/vat.toml`.
+- `sync.max_title_length` prints the *effective* value — the configured integer, or `120` when unset. Unlike the other keys it is never "unset" from a reader's point of view, because sync always enforces some limit (or `0`, disabled).
+- Print the value to stdout and exit 0; for `user.name` and `project.id`, print nothing and exit 0 if unset (CMD-CFG-001/002). Exit 1 only on hard errors (unknown key, invalid config).
 
 ## `vat config set <key> <value>`
 
 - `user.name`: writes to global config, creating `~/.config/vat/config.toml` and parent dirs if needed.
 - `project.id`: writes to `backlog/vat.toml`. Validates the value (3 ASCII alphanumeric chars, FMT-PFX-001). Refuses if any IDs in `backlog.md` or `.used-ids` use the old prefix — changing prefix mid-project would orphan IDs. v1 has no escape hatch; if a user really needs to rewrite the prefix they can edit `vat.toml` directly.
+- `sync.max_title_length`: writes `[sync] max_title_length = <n>` to `backlog/vat.toml` as a TOML integer, creating the `[sync]` table if absent and preserving every other section and key (FMT-CFG-003). `<value>` must be a non-negative decimal integer that fits `usize` (`0` disables the check); anything else (`-1`, `abc`, `1.5`, empty) is rejected with an error naming the key, and nothing is written. Like `project.id`, it requires an existing `vat.toml` (run `vat init` first). Because `vat.toml` is validated eagerly on load (FMT-CFG-005), `set` cannot repair an already-invalid value in the file — the user fixes that by hand, guided by the error.
 - Other keys: error with `unknown config key: <key>`.
 
 ## v1 limits and non-behaviors

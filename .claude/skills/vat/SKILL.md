@@ -156,9 +156,13 @@ Plain text, newline-delimited, one full ID per line (e.g., `foo-7k2`). Append-or
 ```toml
 [project]
 id = "foo"   # exactly 3 ASCII alphanumeric characters (letters + digits)
+
+[sync]
+max_title_length = 120   # optional
 ```
 
-- `project.id` is required. Validate on every command; missing/invalid is a hard error pointing at `vat init`.
+- `project.id` is required. Validate whenever you load `vat.toml`; missing/invalid is a hard error pointing at `vat init`.
+- `sync.max_title_length` is optional: absent (or `[sync]` absent/empty) → `120`; `0` disables `sync`'s title-length check. It must be a non-negative TOML integer. A negative value, a non-integer (`"120"`, `120.0`, `true`), or a `[sync]` that is not a table is a hard error whenever you load `vat.toml`: `vat.toml [sync].max_title_length must be a non-negative integer` — no `vat init` pointer. Unknown keys inside `[sync]` are ignored (the default applies).
 - Preserve unknown sections/keys on rewrite.
 
 ### `~/.config/vat/config.toml`
@@ -198,12 +202,12 @@ All-or-nothing: if any error occurs during parsing/ID-generation/validation, no 
 
 VAT's state is plain markdown, so normally you just edit files and leave git to the human (exactly what the binary does). But a `backlog/` is sometimes its **own git repository** — a submodule, or a standalone clone an agent pulled — and then an autonomous agent has no human to commit, push, and resolve a rejected push. So when you detect a nested-repo backlog, **you** drive git: claim tasks against the shared backlog remote with a first-push-wins loop.
 
-**Detection.** Before running any *mutating* command (`sync`, `start`, `block`, `unblock`, `done`, `config set project.id`), test for `backlog/.git`:
+**Detection.** Before running any *mutating* command (`sync`, `start`, `block`, `unblock`, `done`, `config set project.id`, `config set sync.max_title_length`), test for `backlog/.git`:
 
 - **Absent** → ordinary backlog. Apply the change in place using the binary if installed (§ Binary-first delegation), and run no git.
 - **Present** (a directory, or a *file* in the submodule/worktree case) → nested-repo backlog. Run the command through the machinery below. **All `git` runs from inside `backlog/`** (`git -C backlog ...`).
 
-Non-mutating commands (`config get`, and `init`, which runs before `backlog/` exists) never run git, regardless. The **claim-loop commands** are `sync`, `start`, `block`, `unblock`, `done`; `config set project.id` is handled separately (single push — end of this section).
+Non-mutating commands (`config get`, and `init`, which runs before `backlog/` exists) never run git, regardless. The **claim-loop commands** are `sync`, `start`, `block`, `unblock`, `done`; the **project-config sets** (`config set project.id`, `config set sync.max_title_length`) are handled separately (single push — end of this section).
 
 ### The atomicity guard (evaluate once, at entry)
 
@@ -266,7 +270,7 @@ loop:
 | `block <id> <b>` | already `[blocked-by:<b>]` (same blocker) | success (no-op) |
 | `sync` | — | none — always proceed |
 
-There is no "already mine, success" case for `start`: a rejected claim is reset away before re-read, so any claim seen on fresh state is someone else's (or your own from a *prior* completed `start`, which is still a refusal). Terminal preconditions end the loop early; they don't replace normal validation — a fresh-state `unknown id` / `unknown blocker` still aborts (exit 1, no retry).
+There is no "already mine, success" case for `start`: a rejected claim is reset away before re-read, so any claim seen on fresh state is someone else's (or your own from a *prior* completed `start`, which is still a refusal). Terminal preconditions end the loop early; they don't replace normal validation — a fresh-state `unknown id` / `unknown blocker`, or a `sync` title-length violation, still aborts (exit 1, no retry, no commit).
 
 **Fixed commit messages** (auditable remote history):
 
@@ -280,9 +284,9 @@ There is no "already mine, success" case for `start`: a rejected claim is reset 
 
 `sync` re-run after contention recomputes ids against the refreshed `backlog.md` + `.used-ids`; ids from a discarded attempt impose no constraint (they were never pushed).
 
-### `config set project.id` (single push, no loop)
+### Project-config sets: `config set project.id` / `config set sync.max_title_length` (single push, no loop)
 
-Concurrent re-prefixing isn't a real scenario, and re-deciding a re-prefix against a winner's fresh state would be destructive — so this command does **not** loop. With the guard satisfied: edit `vat.toml` (by running `vat config set project.id <v>` when the binary is installed, otherwise the prose procedure) → `git commit -m "vat config set project.id <v>"` → `git push`, **once**. No refresh, no reset, no re-decide. A rejected or failed push fails fast with the raw git error (exit 1); the user pulls and re-runs. If `project.id` already equals `<v>`, succeed without writing, committing, or pushing. (Dirty-or-ahead still falls back to local-edit-only, like any mutating command.)
+Concurrent config edits aren't a real scenario, and re-deciding a re-prefix against a winner's fresh state would be destructive — so these commands do **not** loop. With the guard satisfied: run the local validation (`project.id`: format + no mixed prefixes; `sync.max_title_length`: non-negative integer), then edit `vat.toml` (by running `vat config set <key> <v>` when the binary is installed, otherwise the prose procedure) → `git commit -m "vat config set <key> <v>"` → `git push`, **once**. No refresh, no reset, no re-decide. A rejected or failed push fails fast with the raw git error (exit 1); the user pulls and re-runs. If `<key>` is already set to `<v>` in `vat.toml`, succeed without writing, committing, or pushing (for `sync.max_title_length`, an unset key that merely defaults to `<v>` still writes, making the value explicit). (Dirty-or-ahead still falls back to local-edit-only, like any mutating command.)
 
 ## Procedures
 
@@ -295,6 +299,26 @@ The only command that mutates the structure of `backlog.md`. Idempotent.
 1. Load `backlog/vat.toml`; require `project.id`. Missing/invalid → abort with init pointer.
 2. Read `backlog.md` (missing → abort with init pointer). Run version check. Split frontmatter / parsed / freeform.
 3. Parse parsed region into preamble + entries.
+3a. **Title-length check (new bullets only).** Let `limit` = `sync.max_title_length` (default `120`). If `limit` is `0`, skip this step. For every well-formed entry with **no `[id]`** (bullets that already have an `[id]`, and title-less malformed bullets, are never checked), compute its **measured title** from the raw bullet line:
+   1. Drop the leading `- ` bullet marker.
+   2. Remove every `[` … next `]` span anywhere on the line — every bracketed group is a tag, recognized marker or not (`[TODO]`, `[ ]`, the `[text]` half of a link). An unmatched `[` stays as text.
+   3. Remove a `(see ./items/<anything>.md)` pointer followed only by whitespace.
+   4. Trim leading/trailing whitespace (interior whitespace counts as written). Count **characters**, not bytes.
+
+   If any measured title is longer than `limit`, **abort with no writes** (exit 1) and report *every* offender in one error. Number bullets by 1-based position among *all* task bullets, malformed ones included. Show each one's length and its measured title, cut to the first 80 chars with `…` when longer. Then state the limit and the key, and show how to fix it:
+   ```
+   error: 1 new bullet has a title longer than 120 characters (backlog/vat.toml [sync].max_title_length):
+     bullet #4 (147 chars): "Refactor the parser so markers can appear anywhere on the line and also handl…"
+
+   Keep the bullet to a short title and put the detail in indented notes beneath it:
+
+     - Speed up sync on large backlogs
+       Probably the per-run item-file scan; profile with 5k bullets.
+       Compare timings before and after.
+
+   `vat sync` moves the indented notes into backlog/items/<id>.md and links the bullet to it.
+   ```
+   On this abort, still print any "has no title" warnings, but do **not** print "drops extra [blocked-by:]" warnings (nothing was re-serialized). This check runs before the duplicate-id check below, so it is the error reported when both apply.
 4. Read `.used-ids` (missing → empty). Build `used` = those ids ∪ every id present on a bullet in the parsed region.
 5. Two bullets sharing the same `[id]` → abort with no writes; message points at the offending lines.
 6. For each entry in order:
@@ -396,7 +420,7 @@ This directory is managed by [VAT](https://github.com/) (Versioned Addressable T
 
 ## Workflow
 
-1. Type new bullets into `backlog.md`:
+1. Type new bullets into `backlog.md`. Keep each bullet a short title — `vat sync` rejects new titles over 120 characters (`[sync] max_title_length` in `vat.toml`) — and put the detail in indented notes:
    ```
    - rewrite the cache layer
        why: the LRU is thrashing on hot keys
@@ -411,12 +435,13 @@ This README is written once at init and never read or rewritten by VAT after tha
 
 ### `vat config get <key>`
 
-Supported keys: `user.name`, `project.id`. Print the value to stdout, or print nothing and exit non-zero if unset.
+Supported keys: `user.name`, `project.id`, `sync.max_title_length`. Print the value to stdout and exit 0. For `user.name` and `project.id`, print nothing (exit 0) if unset. For `sync.max_title_length`, print the effective value — `120` when unset.
 
 ### `vat config set <key> <value>`
 
 - `user.name`: writes to global config (creating `~/.config/vat/config.toml` and parent dirs as needed). Format `[user]\nname = "<value>"\n`. Preserve unknown sections/keys.
 - `project.id`: writes to `backlog/vat.toml`. Validate (3 ASCII alphanumeric chars). **Refuse** if any id in `backlog.md` or `.used-ids` uses the old prefix — changing prefix mid-project would orphan ids. No `--force`. Users with a real need can edit `vat.toml` directly.
+- `sync.max_title_length`: `<value>` must be a non-negative decimal integer (`0` disables the check); anything else (`-1`, `abc`, `1.5`, empty) → error naming the key, nothing written. Requires an existing `backlog/vat.toml`. Write `[sync]\nmax_title_length = <value>` as a TOML **integer** (not a quoted string), creating `[sync]` if absent and preserving every other section and key.
 - Other keys → `unknown config key: <key>`.
 
 ## Files this skill is allowed to touch

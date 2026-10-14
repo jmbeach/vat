@@ -158,9 +158,14 @@ Callers (`vat sync`, `vat done`) hold the path; tombstone is a dumb file-format 
 ```toml
 [project]
 id = "foo"   # exactly 3 ASCII alphanumeric characters (letters + digits)
+
+[sync]
+max_title_length = 120   # optional
 ```
 
 - `project.id` is required. Validated on every command via the `prefix` module (3 ASCII alphanumeric chars, FMT-PFX-001) — not the Crockford suffix validator; an invalid or missing prefix is a hard error with a pointer to `vat init`.
+- `sync.max_title_length` is optional. Absent (or the whole `[sync]` table absent) → `120`. Must be a non-negative TOML integer; an empty `[sync]` table also gets the default. `0` disables `vat sync`'s title-length check (see [sync LLD § Title-length check](./sync.md#title-length-check)). A negative value, a value too large for the platform's `usize`, a non-integer (`"120"`, `120.0`), or a `[sync]` that is not a table is a hard error naming the key (`vat.toml [sync].max_title_length must be a non-negative integer`) — *not* an `vat init` pointer, since re-initializing would not fix it. Parsed by `project_config::parse` alongside `project.id`, exposed as `ProjectConfig::max_title_length() -> usize`. Validation is eager: a bad value fails every command that loads `vat.toml` — `sync` and `config get/set` of `project.id` / `sync.max_title_length` — not just sync's check. `start`, `block`, `unblock`, and `done` never load project config, so they are unaffected. Unknown keys inside `[sync]` (e.g. a misspelled `max_title_len`) are ignored and preserved like any other unknown key; the default applies.
+- `vat init` does not write `[sync]`; the default applies implicitly. `vat config get/set sync.max_title_length` reads and writes it (see [commands LLD](./commands.md#vat-config-get-key)).
 - The file may contain other `[section]` blocks in the future; unknown keys are preserved on rewrite (write only the keys we own).
 
 ## `~/.config/vat/config.toml`

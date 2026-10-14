@@ -15,7 +15,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 - docs/llds/commands.md
 
 ### EARS
-- docs/specs/commands-specs.md (42 active specs: 42 implemented, 0 gaps; 4 deferred)
+- docs/specs/commands-specs.md (46 active specs: 46 implemented, 0 gaps; 4 deferred)
 
 ### Tests
 - src/test_support.rs — shared `cfg(test)` helpers (`HEADER`, `make_backlog_dir`, `write_backlog`, `read_backlog`) used by `cmd_start`, `cmd_block`, `cmd_unblock`, `cmd_done`, `cmd_config`
@@ -33,7 +33,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ### Code
 - src/main.rs — clap command dispatch; all command dispatchers; `classify_exit_code()` (CMD-EXIT-001 to 003)
-- src/cmd_config.rs — `vat config get` and `vat config set` (CMD-CFG-001 to 006)
+- src/cmd_config.rs — `vat config get` and `vat config set` (CMD-CFG-001 to 009; `sync.max_title_length` added by vat-ccg)
 - src/cmd_init.rs — `vat init` full implementation (CMD-INIT-001 to 007, FMT-FM-005)
 - src/cmd_start.rs — `vat start <id>` (CMD-START-001 to 004) + the shared `find_entry_index`/`EntryLookup` lookup helper (CMD-CC-002, CMD-CC-004) and the interim-shared `serialize_region_with_replaced_bullet` emitter
 - src/cmd_block.rs — `vat block <id> <blocker-id>` (CMD-BLOCK-001 to 006); reuses `find_entry_index` and `Bullet` marker machinery
@@ -68,16 +68,16 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 | `vat block` | CMD-BLOCK-001 to 006 | 6 | 0 | 0 |
 | `vat unblock` | CMD-UNBLOCK-001 to 002 | 2 | 0 | 0 |
 | `vat done` | CMD-DONE-001 to 005 | 5 | 0 | 0 |
-| `vat config` | CMD-CFG-001 to 006 | 6 | 0 | 0 |
+| `vat config` | CMD-CFG-001 to 009 | 9 | 0 | 0 |
 | `vat completions` | CMD-COMP-001 to 005 | 5 | 0 | 0 |
 | Exit codes | CMD-EXIT-001 to 003 | 3 | 0 | 0 |
 | Deferred | CMD-LOCK-001, CMD-FORCE-001, CMD-DRYRUN-001, CMD-INIT-ADOPT-001 | 0 | 4 | 0 |
 
-**Summary:** 42 of 42 active specs implemented; 4 deferred; 0 gaps.
+**Summary:** 46 of 46 active specs implemented; 4 deferred; 0 gaps.
 
 ## Key Findings
 
-1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 006 with inline tests. `cmd_config_get` (main.rs:156) and `cmd_config_set` (main.rs:169) are both wired and annotated.
+1. **Config commands fully implemented** — `src/cmd_config.rs` covers CMD-CFG-001 to 009 with inline tests (CMD-CFG-007..009, the `sync.max_title_length` key, added by vat-ccg; also exercised end to end in `tests/sync_title_length.rs`). `cmd_config_get` (main.rs:156) and `cmd_config_set` (main.rs:169) are both wired and annotated.
 
 2. **`vat init` fully implemented** — `src/cmd_init.rs` (PR #29) implements CMD-INIT-001 to 007 with tests. The interactive-prompt path (`prompt_for_prefix()` in `main.rs`) covers CMD-INIT-003. `src/readme_template.rs` renders the baked-in template (CMD-INIT-006). `cmd_init.rs` also satisfies FMT-FM-005 by writing `"---\nversion: 1\n---\n"` to `backlog.md`.
 

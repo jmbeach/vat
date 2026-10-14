@@ -46,7 +46,7 @@ Detection is a single test for `backlog/.git` (a directory, or a file in the sub
 
 ## The atomic claim loop (nested-repo backlogs)
 
-A **mutating command** is any command that writes a file under `backlog/`: `sync`, `start`, `block`, `unblock`, `done`, and `config set project.id`. The **claim-loop commands** — `sync`, `start`, `block`, `unblock`, `done` — run the full retry loop below when `backlog/.git` exists; each runs `read → decide → mutate → write` inside it. `config set project.id` is excluded from the loop (see [§ `config set project.id`](#config-set-projectid-is-not-a-claim-loop-command)). All `git` runs from inside `backlog/`.
+A **mutating command** is any command that writes a file under `backlog/`: `sync`, `start`, `block`, `unblock`, `done`, and the **project-config sets** (`config set project.id`, `config set sync.max_title_length`). The **claim-loop commands** — `sync`, `start`, `block`, `unblock`, `done` — run the full retry loop below when `backlog/.git` exists; each runs `read → decide → mutate → write` inside it. The project-config sets are excluded from the loop (see [§ `config set project.id`](#config-set-projectid-is-not-a-claim-loop-command)). All `git` runs from inside `backlog/`.
 
 ```
 attempt = 0
@@ -93,7 +93,7 @@ The terminal precondition is checked on fresh state (step 3), before mutating. I
 | `block <id> <b>` | the task already has `[blocked-by:<b>]` for the same blocker | success — no-op, stop |
 | `sync` | (none — sync has no terminal precondition) | always proceeds to mutate |
 
-`start` reports a loss for *any* existing claim, exactly as `CMD-START-002` errors for any existing claim — there is no "already mine, success" case, because the loop never produces a self-claimed refreshed state: a rejected claim is `reset --hard`ed away before re-read, so a claim seen on fresh state is always someone else's (or your own from a *prior* completed `vat start`, which `CMD-START-002` already rejects). `config set project.id` does not appear here — it is not a claim-loop command.
+`start` reports a loss for *any* existing claim, exactly as `CMD-START-002` errors for any existing claim — there is no "already mine, success" case, because the loop never produces a self-claimed refreshed state: a rejected claim is `reset --hard`ed away before re-read, so a claim seen on fresh state is always someone else's (or your own from a *prior* completed `vat start`, which `CMD-START-002` already rejects). The project-config sets do not appear here — they are not claim-loop commands.
 
 A terminal precondition only ends the loop early; it never replaces a command's normal local validation (e.g. `start` still errors on `unknown id`, `block` still errors on `unknown blocker`). Those local errors stop the command without entering or continuing the loop.
 
@@ -114,6 +114,7 @@ Each command commits with a fixed message so the backlog remote's history is aud
 | `unblock <id>` | `vat unblock <id>` |
 | `done <id>` | `vat done <id>` |
 | `config set project.id <v>` | `vat config set project.id <v>` |
+| `config set sync.max_title_length <n>` | `vat config set sync.max_title_length <n>` |
 
 ## The atomicity guard
 
@@ -140,14 +141,16 @@ git -C backlog merge-base --is-ancestor HEAD @{u}
 
 `config set project.id` re-prefixes a project — a rare, administrative operation guarded locally by `CMD-CFG-005` (it refuses if any id in `backlog.md` or `.used-ids` still uses a different prefix). Agents racing to re-prefix a project is not a real scenario, so the contention machinery is unwarranted, and worse than unwarranted: re-running the re-prefix decision against a winner's fresh state is exactly the kind of destructive re-decide the loop's reset semantics are *not* meant for. So this command is excluded from the loop.
 
-On a nested-repo backlog, with the atomicity guard satisfied, it runs a **single push**: edit `vat.toml` → commit (`vat config set project.id <v>`) → `git push`, once. There is no refresh, no reset, no re-decide. A rejected or otherwise failed push **fails fast** with the raw git error (exit 1) and the user re-runs after pulling. If `project.id` already equals the requested value, it succeeds without writing, committing, or pushing. The atomicity guard still applies: on a dirty-or-ahead `backlog/` it falls back to the local-edit-only path like any other mutating command.
+`config set sync.max_title_length` is excluded for the same structural reason — it is a rare administrative edit to `vat.toml`, not task coordination — and shares the path below (commit message `vat config set sync.max_title_length <n>`). It needs no prefix guard; its only local validation is the value check (`CMD-CFG-008`). Its no-op check compares against the value written in `vat.toml`: setting `120` on an unset key still writes, making the default explicit for every collaborator.
+
+On a nested-repo backlog, with the atomicity guard satisfied, each runs a **single push**: edit `vat.toml` → commit (`vat config set <key> <v>`) → `git push`, once. There is no refresh, no reset, no re-decide. A rejected or otherwise failed push **fails fast** with the raw git error (exit 1) and the user re-runs after pulling. If `project.id` already equals the requested value, it succeeds without writing, committing, or pushing. The atomicity guard still applies: on a dirty-or-ahead `backlog/` it falls back to the local-edit-only path like any other mutating command.
 
 ## Decisions & Alternatives
 
 | Decision | Chosen | Alternatives considered | Rationale |
 |---|---|---|---|
 | Who runs the claim loop | The skill only; the binary stays git-agnostic | The binary also detects `backlog/.git` and runs the loop | The binary is a pure markdown mutator (HLD Decision #1) — a human driving it is their own retry loop; only the autonomous skill needs to internalize git, so a nested-repo backlog is the skill's awareness, not a VAT-wide mode |
-| Loop command set | `sync`, `start`, `block`, `unblock`, `done`; `config set project.id` excluded (single push) | All mutating commands loop uniformly | Concurrent re-prefixing is not a real scenario; re-deciding a re-prefix against a winner's fresh state is destructive, so the loop's reset semantics are wrong for it |
+| Loop command set | `sync`, `start`, `block`, `unblock`, `done`; project-config sets (`project.id`, `sync.max_title_length`) excluded (single push) | All mutating commands loop uniformly | Concurrent re-prefixing is not a real scenario; re-deciding a re-prefix against a winner's fresh state is destructive, so the loop's reset semantics are wrong for it |
 | Contention resolution | `reset --hard` to winner + re-decide from scratch | rebase/merge the loser's commit | Recomputing the decision on fresh state avoids textual merge conflicts entirely, including false conflicts between disjoint tasks on nearby lines |
 | Atomicity guard | clean **and synced** at entry (`HEAD` ⊆ `@{u}`); else local-edit-only | clean tree only; "the edit is the sole dirty file"; stash unrelated work around the loop | `reset --hard` also destroys unpushed commits, so a clean tree alone is unsafe; awareness is decided before the edit, so the inherited state is the only honest signal; stashing adds failure modes (stash conflicts on reset) |
 | Non-contention failures | fail fast with raw git error | retry; or degrade to a silent local edit | A lost-claim report must mean a real lost race; a silent local edit would let an agent think it claimed a task it did not |
@@ -165,7 +168,7 @@ On a nested-repo backlog, with the atomicity guard satisfied, it runs a **single
 6. ✅ Exit/report semantics for the loop: contention exhausted at `MAX` → user-facing error (exit 1, `CMD-EXIT-002`); non-contention git failure (network/auth/quota/unreachable remote) → also user-facing error (exit 1, `CMD-EXIT-002`), carrying the raw git message.
 7. ✅ The claim loop is the skill's alone — the binary stays unaware of a nested-repo backlog and never runs git. This is a permanent division of labor, not a gap pending binary parity.
 8. ✅ `start` has no "already mine, success" case — any existing claim on fresh state is a loss, consistent with `CMD-START-002`; the loop never produces a self-claimed refreshed state.
-9. ✅ `config set project.id` is excluded from the claim loop — single push, fail fast on rejection (concurrent re-prefixing is out of scope).
+9. ✅ The project-config sets (`config set project.id`, `config set sync.max_title_length`) are excluded from the claim loop — single push, fail fast on rejection (concurrent config edits are out of scope).
 10. ✅ A claim-loop command whose mutate leaves the tree byte-identical (e.g. no-op `sync`) reports `unchanged` and makes no commit/push.
 
 ### Deferred
