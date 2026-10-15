@@ -4,7 +4,7 @@ CLI shell — argument parsing, help/version, error rendering, output streams, e
 
 ## Status
 
-**OK** — verified 2026-10-10. `docs/specs/cli-specs.md` now formalizes the shell contract (10 CLI-* specs, all implemented). This pass closed three gaps: `vat --version` was rejected by clap (CLI-VER-001); `vat init` / `vat sync` rendered errors without the shared `error: ` prefix (CLI-ERR-001); cause chains repeated text that leaf errors already embed (CLI-ERR-003). Every dispatcher now fails through `fail()` in `src/main.rs`. Exit-code classification (CMD-EXIT-001..003) now covers every command, `cmd_init` and `cmd_sync` included.
+**OK** — re-verified 2026-10-14 (HEAD `eb38c23`); previously 2026-10-10. `docs/specs/cli-specs.md` now formalizes the shell contract (10 CLI-* specs, all implemented). This pass closed three gaps: `vat --version` was rejected by clap (CLI-VER-001); `vat init` / `vat sync` rendered errors without the shared `error: ` prefix (CLI-ERR-001); cause chains repeated text that leaf errors already embed (CLI-ERR-003). Every dispatcher now fails through `fail()` in `src/main.rs`. Exit-code classification (CMD-EXIT-001..003) now covers every command, `cmd_init` and `cmd_sync` included.
 
 ## References
 

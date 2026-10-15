@@ -4,7 +4,7 @@
 
 ## Status
 
-**OK** — re-verified 2026-10-12 (HEAD `f6e247e`, vat-ccg); previously 2026-10-10 (HEAD `c265c95`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), item-file pointer suffix (vat-mzd, PR #61), and the new-bullet title-length check (vat-ccg) are all implemented. All 33 active specs are satisfied; 1 deferred (SYNC-GC-001).
+**OK** — re-verified 2026-10-14 (HEAD `eb38c23`); previously 2026-10-12 (HEAD `f6e247e`, vat-ccg); previously 2026-10-10 (HEAD `c265c95`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), item-file pointer suffix (vat-mzd, PR #61), and the new-bullet title-length check (vat-ccg) are all implemented. All 33 active specs are satisfied; 1 deferred (SYNC-GC-001).
 
 ## References
 

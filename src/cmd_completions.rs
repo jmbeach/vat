@@ -8,7 +8,7 @@ use crate::Cli;
 /// Shells `vat completions` accepts. Deliberately narrower than
 /// `clap_complete::Shell`: the contract is exactly bash/zsh/fish, and a
 /// semver-compatible `clap_complete` upgrade must not widen it silently.
-// @spec CMD-COMP-002
+// @spec CMD-COMP-002, CMD-COMP-004
 #[derive(Clone, Copy, ValueEnum)]
 pub enum SupportedShell {
     Bash,
