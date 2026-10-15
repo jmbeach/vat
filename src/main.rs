@@ -319,6 +319,7 @@ fn classify_cause(cause: &(dyn std::error::Error + 'static)) -> Option<i32> {
             SyncError::Config(c) => classify_cause(c),
             SyncError::Tombstone(t) => classify_cause(t),
             // On-disk data the user can fix by editing backlog files.
+            // @spec SYNC-LEN-007
             SyncError::NoBacklog
             | SyncError::TitleTooLong { .. }
             | SyncError::IdAssignment(IdAssignmentError::DuplicateId(_))
