@@ -201,6 +201,16 @@ fn golden_notes_append_to_existing_item_file() {
     check("notes-append", Ids::PreExisting);
 }
 
+/// Post-first-sync enrichment: the bullet already carries the canonical pointer
+/// suffix in its title (from a prior sync that created the item file). New notes
+/// are added beneath it; sync appends them to the existing item file without
+/// doubling the pointer suffix (SYNC-NOTES-003, SYNC-PTR-003).
+// @spec SYNC-NOTES-001, SYNC-NOTES-003, SYNC-PTR-003
+#[test]
+fn golden_notes_append_when_bullet_already_has_ptr_suffix() {
+    check("notes-append-post-sync", Ids::PreExisting);
+}
+
 // ── whitespace-only notes are dropped, no item file created ──────────────────
 
 // @spec SYNC-NOTES-005
