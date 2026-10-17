@@ -4,7 +4,7 @@ Single-entry and config commands — `vat init`, `start`, `block`, `unblock`, `d
 
 ## Status
 
-**OK** — re-verified 2026-10-14 (HEAD `eb38c23`); previously 2026-10-10. All commands are implemented. CMD-EXIT-003 gap closed: every dispatcher, `cmd_init` and `cmd_sync` included, now fails through `fail()` → `classify_exit_code`, which classifies `InitError` and `SyncError` explicitly.
+**OK** — re-verified 2026-10-17 (HEAD `9a79ce5`); previously 2026-10-14 (HEAD `eb38c23`); previously 2026-10-10. All commands are implemented. CMD-EXIT-003 gap closed: every dispatcher, `cmd_init` and `cmd_sync` included, now fails through `fail()` → `classify_exit_code`, which classifies `InitError` and `SyncError` explicitly. CMD-COMP-004 annotation added to `SupportedShell` in `src/cmd_completions.rs`.
 
 ## References
 

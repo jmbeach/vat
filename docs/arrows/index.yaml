@@ -1,5 +1,5 @@
 schema_version: 1
-last_updated: 2026-10-14
+last_updated: 2026-10-17
 
 # Taxonomy groups segments by domain cluster.
 taxonomy:
@@ -28,8 +28,8 @@ arrows:
   sync:
     status: OK
     sampled: 2026-06-09
-    audited: 2026-10-14
-    audited_sha: eb38c23
+    audited: 2026-10-17
+    audited_sha: 9a79ce5
     blocks: []
     blockedBy: [backlog-format]
     detail: sync.md
@@ -39,8 +39,8 @@ arrows:
   commands:
     status: OK
     sampled: 2026-06-09
-    audited: 2026-10-14
-    audited_sha: eb38c23
+    audited: 2026-10-17
+    audited_sha: 9a79ce5
     blocks: []
     blockedBy: [backlog-format]
     detail: commands.md
@@ -50,8 +50,8 @@ arrows:
   cli:
     status: OK
     sampled: 2026-06-09
-    audited: 2026-10-14
-    audited_sha: eb38c23
+    audited: 2026-10-17
+    audited_sha: 9a79ce5
     blocks: []
     blockedBy: []
     detail: cli.md
