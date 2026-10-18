@@ -4,7 +4,7 @@ The `vat` skill — prose implementation of VAT for zero-install agents, nested-
 
 ## Status
 
-**OK** — re-verified 2026-10-14 (HEAD `eb38c23`); previously 2026-10-12 (HEAD `f6e247e`): vat-ccg broadened SKILL-CFG-001..003 to the project-config sets (`config set project.id` and `config set sync.max_title_length`) and added the title-length step (SYNC-LEN-*) to SKILL.md § `vat sync`; evals 13–15 cover the local behavior. Previously 2026-10-10 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`). SKILL.md updated in vat-h4n (alphanumeric prefix prose; 18-line change) — all 37 SKILL-* specs remain verified; the prefix alphabet is an `FMT-PFX-*` concern, not a skill-specific behavior.
+**OK** — re-verified 2026-10-18 (HEAD `9a79ce5`); previously 2026-10-14 (HEAD `eb38c23`); previously 2026-10-12 (HEAD `f6e247e`): vat-ccg broadened SKILL-CFG-001..003 to the project-config sets (`config set project.id` and `config set sync.max_title_length`) and added the title-length step (SYNC-LEN-*) to SKILL.md § `vat sync`; evals 13–15 cover the local behavior. Previously 2026-10-10 (HEAD `c265c95`); previously 2026-06-21 (HEAD `aab182c`). SKILL.md updated in vat-h4n (alphanumeric prefix prose; 18-line change) — all 37 SKILL-* specs remain verified; the prefix alphabet is an `FMT-PFX-*` concern, not a skill-specific behavior.
 
 ## References
 

@@ -4,7 +4,7 @@
 
 ## Status
 
-**OK** — re-verified 2026-10-14 (HEAD `eb38c23`); previously 2026-10-12 (HEAD `f6e247e`, vat-ccg); previously 2026-10-10 (HEAD `c265c95`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), item-file pointer suffix (vat-mzd, PR #61), and the new-bullet title-length check (vat-ccg) are all implemented. All 33 active specs are satisfied; 1 deferred (SYNC-GC-001).
+**OK** — re-verified 2026-10-18 (HEAD `9a79ce5`); previously 2026-10-14 (HEAD `eb38c23`); previously 2026-10-12 (HEAD `f6e247e`, vat-ccg); previously 2026-10-10 (HEAD `c265c95`). Notes extraction (vat-t1h), ID assignment (vat-s9g), marker normalization + write/idempotence guarantees (vat-v3k), item-file pointer suffix (vat-mzd, PR #61), and the new-bullet title-length check (vat-ccg) are all implemented. New golden fixture `notes-append-post-sync` (PR #73) added, pinning SYNC-NOTES-001/003 and SYNC-PTR-003 for the post-first-sync enrichment scenario. All 33 active specs are satisfied; 1 deferred (SYNC-GC-001).
 
 ## References
 
@@ -24,7 +24,7 @@
 - src/title_length.rs (inline `#[cfg(test)]` — SYNC-LEN-001 measured-title rule)
 - src/sync.rs (inline `#[cfg(test)]` — SYNC-LEN-002..006, 009)
 - tests/sync_title_length.rs (binary-driven — SYNC-LEN-002/006/007/008, FMT-CFG-005, CMD-CFG-007/009)
-- tests/sync_golden.rs (fixture-directory golden tests driving the real `vat sync` binary; pins SYNC-ID-001/004, SYNC-WRITE-001/002, SYNC-NOTES-002/003/005, SYNC-MARK-003, SYNC-PTR-001/003 against `tests/fixtures/sync/<case>/{input,expected}` trees)
+- tests/sync_golden.rs (fixture-directory golden tests driving the real `vat sync` binary; pins SYNC-ID-001/004, SYNC-WRITE-001/002, SYNC-NOTES-001/002/003/005, SYNC-MARK-003, SYNC-PTR-001/003 against `tests/fixtures/sync/<case>/{input,expected}` trees; the `notes-append-post-sync` fixture covers the post-first-sync enrichment scenario: bullet already carries pointer suffix, notes appended without doubling it)
 
 ### Code
 - src/sync.rs — sync engine: bullet parse/serialize wiring, marker normalization, ID assignment wiring, notes extraction, item-file pointer suffix, preconditions, write-skip, tombstone append (SYNC-MARK-*, SYNC-ID-004, SYNC-NOTES-*, SYNC-PTR-001..003, SYNC-PRE-*, SYNC-WRITE-*, FMT-PARSE-006)
